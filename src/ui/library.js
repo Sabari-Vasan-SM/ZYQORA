@@ -176,30 +176,7 @@ export class GameLibrary {
       return;
     }
 
-    const supabase = SupabaseService.getInstance();
-    if (!supabase.isConfigured()) {
-      this.showToast('Please configure your Supabase credentials to upload and stream games.', 'warn');
-      const authModal = document.getElementById('cloud-auth-modal');
-      if (authModal) authModal.classList.add('open');
-      return;
-    }
-
-    // Ensure user session (auto-authenticate as anonymous guest if not signed in)
-    if (!supabase.getUser()) {
-      try {
-        this.showToast('Connecting guest cloud session...', 'info');
-        await supabase.signInAnonymously();
-      } catch (authErr) {
-        console.warn('Anonymous sign-in failed, prompting login:', authErr);
-        this.showToast('Please sign in to Supabase to upload cloud games.', 'warn');
-        const authModal = document.getElementById('cloud-auth-modal');
-        if (authModal) authModal.classList.add('open');
-        return;
-      }
-    }
-
-    // Open dedicated Cloud Upload Progress Modal
-    // Close other open modals first
+    // 1. IMMEDIATELY OPEN DEDICATED CLOUD UPLOAD PROGRESS MODAL
     document.querySelectorAll('.modal-backdrop').forEach((m) => m.classList.remove('open'));
     const uploadModal = document.getElementById('cloud-upload-modal');
     if (uploadModal) uploadModal.classList.add('open');
@@ -214,6 +191,11 @@ export class GameLibrary {
     const bytesText = document.getElementById('upload-modal-bytes-text');
     const stateText = document.getElementById('upload-modal-state-text');
     const cancelModalBtn = document.getElementById('btn-cancel-upload-modal');
+    const closeBtn = document.getElementById('btn-close-upload-modal');
+    const authBox = document.getElementById('upload-modal-auth-box');
+    const progressSection = document.getElementById('upload-modal-progress-section');
+    const targetGameEl = document.getElementById('modal-auth-target-game');
+    const offlineBtn = document.getElementById('btn-modal-auth-offline');
 
     const title = file.name.replace(/\.[^/.]+$/, '');
     const isChunked = file.size > 45 * 1024 * 1024;
@@ -222,6 +204,7 @@ export class GameLibrary {
 
     if (titleEl) titleEl.textContent = 'Uploading Game to Supabase';
     if (filenameEl) filenameEl.textContent = `${file.name} (${this.formatBytes(file.size)})`;
+    if (targetGameEl) targetGameEl.textContent = file.name;
     if (subEl) {
       subEl.textContent = isChunked
         ? `Splitting into ${totalParts} chunks (40 MB each) to bypass Supabase Free Plan limit`
@@ -231,20 +214,133 @@ export class GameLibrary {
     if (pctText) pctText.textContent = '0%';
     if (partText) partText.textContent = isChunked ? `Part 1 of ${totalParts}` : 'Single File';
     if (bytesText) bytesText.textContent = `0 B / ${this.formatBytes(file.size)}`;
-    if (stateText) stateText.textContent = 'Initializing cloud storage upload...';
+    if (stateText) stateText.textContent = 'Preparing upload...';
+
+    // Offline fallback button: load directly into local emulator MEMFS
+    if (offlineBtn) {
+      offlineBtn.onclick = () => {
+        if (uploadModal) uploadModal.classList.remove('open');
+        this.showToast('Starting local browser playback...', 'info');
+        this.importFile(file);
+      };
+    }
 
     // Cancel controller
     this.currentUploadAbort = new AbortController();
+    let isCancelled = false;
     const handleCancel = () => {
+      isCancelled = true;
       if (this.currentUploadAbort) {
         this.currentUploadAbort.abort();
       }
+      if (uploadModal) uploadModal.classList.remove('open');
     };
+
     if (cancelModalBtn) {
       cancelModalBtn.onclick = handleCancel;
       cancelModalBtn.disabled = false;
       cancelModalBtn.style.display = 'block';
     }
+    if (closeBtn) {
+      closeBtn.onclick = handleCancel;
+    }
+
+    const supabase = SupabaseService.getInstance();
+    if (!supabase.isConfigured()) {
+      if (authBox) authBox.style.display = 'none';
+      if (progressSection) progressSection.style.display = 'none';
+      if (titleEl) titleEl.textContent = 'Supabase Credentials Needed';
+      if (stateText) stateText.textContent = 'Please configure your Supabase Project URL and Anon Key in Settings.';
+      this.showToast('Supabase is not configured yet. Opening settings...', 'warn');
+      const authModal = document.getElementById('cloud-auth-modal');
+      if (authModal) authModal.classList.add('open');
+      return;
+    }
+
+    // Check user session
+    let currentUser = supabase.getUser();
+    if (!currentUser) {
+      // Try anonymous sign-in first
+      try {
+        if (stateText) stateText.textContent = 'Connecting guest session...';
+        currentUser = await supabase.signInAnonymously();
+      } catch (_) {
+        // Anonymous auth disabled in Supabase dashboard; request inline credentials
+      }
+    }
+
+    // If still not signed in, show inline auth form inside upload modal
+    if (!currentUser) {
+      if (titleEl) titleEl.textContent = 'Supabase Sign-In Required';
+      if (authBox) authBox.style.display = 'block';
+      if (progressSection) progressSection.style.display = 'none';
+
+      currentUser = await new Promise((resolve) => {
+        const btnSignIn = document.getElementById('btn-modal-auth-signin');
+        const btnSignUp = document.getElementById('btn-modal-auth-signup');
+        const emailInput = document.getElementById('modal-auth-email');
+        const passInput = document.getElementById('modal-auth-pass');
+
+        const cleanup = () => {
+          btnSignIn?.removeEventListener('click', doSignIn);
+          btnSignUp?.removeEventListener('click', doSignUp);
+        };
+
+        const doSignIn = async () => {
+          const email = emailInput?.value.trim();
+          const pass = passInput?.value.trim();
+          if (!email || !pass) {
+            this.showToast('Please enter email and password', 'warn');
+            return;
+          }
+          try {
+            btnSignIn.textContent = 'Signing in...';
+            const u = await supabase.signInWithPassword(email, pass);
+            this.showToast('Signed in to Supabase!', 'success');
+            cleanup();
+            resolve(u);
+          } catch (e) {
+            this.showToast(`Sign in error: ${e.message}`, 'error');
+          } finally {
+            btnSignIn.textContent = 'Sign In & Upload';
+          }
+        };
+
+        const doSignUp = async () => {
+          const email = emailInput?.value.trim();
+          const pass = passInput?.value.trim();
+          if (!email || !pass) {
+            this.showToast('Please enter email and password', 'warn');
+            return;
+          }
+          try {
+            btnSignUp.textContent = 'Signing up...';
+            const u = await supabase.signUp(email, pass);
+            this.showToast('Account created! Sign in to proceed.', 'info');
+            cleanup();
+            resolve(u);
+          } catch (e) {
+            this.showToast(`Sign up error: ${e.message}`, 'error');
+          } finally {
+            btnSignUp.textContent = 'Sign Up';
+          }
+        };
+
+        btnSignIn?.addEventListener('click', doSignIn);
+        btnSignUp?.addEventListener('click', doSignUp);
+      });
+
+      if (!currentUser || isCancelled) {
+        if (uploadModal) uploadModal.classList.remove('open');
+        return;
+      }
+    }
+
+    // Now authenticated: show progress section and start upload!
+    if (authBox) authBox.style.display = 'none';
+    if (progressSection) progressSection.style.display = 'block';
+    if (titleEl) titleEl.textContent = 'Uploading Game to Supabase';
+    if (stateText) stateText.textContent = 'Initializing cloud storage upload...';
 
     try {
       const gameRecord = await supabase.uploadGame(

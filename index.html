@@ -544,8 +544,11 @@
 
     <!-- Dedicated Cloud Upload Progress Modal -->
     <div class="modal-backdrop" id="cloud-upload-modal">
-      <div class="modal-card" style="max-width: 500px; text-align: center; padding: 28px 24px; border: 1px solid rgba(14, 165, 233, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);">
-        <div style="width: 56px; height: 56px; margin: 0 auto 16px auto; border-radius: 50%; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); display: flex; align-items: center; justify-content: center;">
+      <div class="modal-card" style="max-width: 500px; text-align: center; padding: 24px 24px; border: 1px solid rgba(14, 165, 233, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);">
+        <div style="display: flex; justify-content: flex-end; margin-top: -8px; margin-bottom: 4px;">
+          <button class="btn-icon close-modal-btn" id="btn-close-upload-modal" style="width: 24px; height: 24px; font-size: 12px;">✕</button>
+        </div>
+        <div style="width: 56px; height: 56px; margin: 0 auto 12px auto; border-radius: 50%; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); display: flex; align-items: center; justify-content: center;">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
             <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
             <polyline points="16 16 12 12 8 16"></polyline>
@@ -555,11 +558,41 @@
 
         <h3 id="upload-modal-title" style="margin: 0 0 6px 0; font-size: 18px; color: #fff;">Uploading Game to Supabase</h3>
         <div id="upload-modal-filename" style="font-size: 13px; color: #38bdf8; font-weight: 600; margin-bottom: 2px;">game.iso</div>
-        <div id="upload-modal-sub" style="font-size: 11px; color: var(--text-dim); margin-bottom: 20px;">
+        <div id="upload-modal-sub" style="font-size: 11px; color: var(--text-dim); margin-bottom: 16px;">
           Bypassing 50 MB Free Plan limit using automatic 40 MB chunking
         </div>
 
-        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
+        <!-- Inline Authentication Box (shown if not signed in) -->
+        <div id="upload-modal-auth-box" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(14, 165, 233, 0.35); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
+          <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Supabase Sign-In Required</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+            Sign in to upload <span id="modal-auth-target-game" style="color: #38bdf8; font-weight: 600;"></span> to your private Supabase storage:
+          </div>
+          <div style="margin-bottom: 8px;">
+            <input type="email" id="modal-auth-email" placeholder="Email (e.g. player@example.com)" style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 12.5px;" />
+          </div>
+          <div style="margin-bottom: 12px;">
+            <input type="password" id="modal-auth-pass" placeholder="Password" style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 12.5px;" />
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <button class="btn-primary" id="btn-modal-auth-signin" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px;">Sign In & Upload</button>
+            <button class="btn-primary" id="btn-modal-auth-signup" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px; background: rgba(255,255,255,0.08); border-color: var(--border-subtle);">Sign Up</button>
+          </div>
+          <div style="text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px;">
+            <button type="button" id="btn-modal-auth-offline" style="background: none; border: none; color: #38bdf8; font-size: 11.5px; cursor: pointer; text-decoration: underline;">
+              Play locally in browser (no cloud sync)
+            </button>
+          </div>
+        </div>
+
+        <!-- Upload Progress Section -->
+        <div id="upload-modal-progress-section" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
           <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 8px;">
             <span id="upload-modal-part-text" style="color: #38bdf8; font-weight: 600;">Part 1 of 1</span>
             <span id="upload-modal-pct-text" style="color: #fff; font-family: var(--font-mono); font-weight: 700;">0%</span>
