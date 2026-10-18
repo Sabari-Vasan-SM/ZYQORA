@@ -76,13 +76,14 @@ export class GameLibrary {
 
   initCloud() {
     const supabase = SupabaseService.getInstance();
-    supabase.onAuthChange((user) => {
-      if (user) {
-        this.loadCloudGames();
-      } else {
-        this.cloudGames = [];
-        this.renderCloudGames();
-      }
+
+    // Auto-load cloud games on init if Supabase is configured
+    if (supabase.isConfigured()) {
+      this.loadCloudGames();
+    }
+
+    supabase.onAuthChange(() => {
+      this.loadCloudGames();
     });
 
     // Cloud upload file input
@@ -150,7 +151,7 @@ export class GameLibrary {
 
   async loadCloudGames() {
     const supabase = SupabaseService.getInstance();
-    if (!supabase.isConfigured() || !supabase.getUser()) {
+    if (!supabase.isConfigured()) {
       this.renderCloudGamesPromptLogin();
       return;
     }
