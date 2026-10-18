@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types tests/range-verifier.test.ts && node --experimental-strip-types tests/remote-game-file.test.ts && node --experimental-strip-types tests/iso-parser.test.ts && node --experimental-strip-types tests/e2e-cloud-streaming.test.ts"
   },
   "repository": {
     "type": "git",
@@ -20,7 +21,12 @@
   },
   "homepage": "https://github.com/Sabari-Vasan-SM/ZYQORA#readme",
   "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
     "vite": "^8.3.4"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  }
 }

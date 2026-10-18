@@ -13,6 +13,13 @@ export class PerformanceHUD {
     this.audioEl = document.getElementById('hud-audio');
     this.resEl = document.getElementById('hud-res');
 
+    // Streaming HUD elements
+    this.streamBytesEl = document.getElementById('hud-stream-bytes');
+    this.streamCacheEl = document.getElementById('hud-stream-cache');
+    this.streamLatencyEl = document.getElementById('hud-stream-latency');
+    this.streamStateEl = document.getElementById('hud-stream-state');
+    this.streamRowEl = document.getElementById('hud-stream-row');
+
     this.history = new Array(60).fill(16.6);
     this.lastTime = performance.now();
     this.frameCount = 0;
@@ -21,6 +28,32 @@ export class PerformanceHUD {
 
     this.rafId = null;
     this.init();
+  }
+
+  updateStreamingMetrics(metrics, totalSizeBytes) {
+    if (!metrics) return;
+    if (this.streamRowEl) {
+      this.streamRowEl.style.display = 'flex';
+    }
+
+    if (this.streamBytesEl) {
+      const fetchedMB = (metrics.bytesFetched / (1024 * 1024)).toFixed(1);
+      const totalMB = totalSizeBytes ? (totalSizeBytes / (1024 * 1024)).toFixed(0) : '?';
+      this.streamBytesEl.textContent = `${fetchedMB} / ${totalMB} MB`;
+    }
+
+    if (this.streamCacheEl) {
+      this.streamCacheEl.textContent = `${metrics.hitRatePercent}% (${metrics.rangeRequestsCount} reqs)`;
+    }
+
+    if (this.streamLatencyEl) {
+      this.streamLatencyEl.textContent = `${metrics.averageLatencyMs} ms`;
+    }
+
+    if (this.streamStateEl) {
+      this.streamStateEl.textContent = metrics.activeRequests > 0 ? 'Buffering' : 'Streaming';
+      this.streamStateEl.className = 'hud-val ' + (metrics.activeRequests > 0 ? 'fps-warn' : 'fps-good');
+    }
   }
 
   init() {

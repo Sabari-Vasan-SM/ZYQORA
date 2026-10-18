@@ -3,6 +3,7 @@ import { GamepadManager } from './ui/gamepad.js';
 import { TouchControls } from './ui/touch-controls.js';
 import { GameLibrary } from './ui/library.js';
 import { EmulatorManager } from './core/emulator-manager.js';
+import { SupabaseService } from './services/supabase.ts';
 
 // Toast Notification helper
 function showToast(message, type = 'info') {
@@ -53,6 +54,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onToast: (msg, type) => showToast(msg, type),
     onResolutionChange: (mult) => hud.setResolution(mult),
+    onStreamingMetrics: (metrics, totalBytes) => hud.updateStreamingMetrics(metrics, totalBytes),
   });
 
   // Gamepad Manager
@@ -92,6 +94,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupModals(emulator);
   setupDropzone(library);
   setupFullscreen(pspFrame);
+  setupCloudAuth(library);
 
   // Set default resolution in HUD
   hud.setResolution(1);
@@ -129,7 +132,7 @@ function setupHeaderControls(emulator, library, touch, hud) {
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (file) {
-        library.importFile(file);
+        library.handleGameFileIngestion(file);
       }
       fileInput.value = '';
     });
@@ -189,10 +192,13 @@ function setupModals(emulator) {
     btn.addEventListener('click', closeAllModals);
   });
 
-  // Close on backdrop click
+  // Close on backdrop click (prevent closing cloud-upload-modal during upload)
   document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) closeAllModals();
+      if (e.target === backdrop) {
+        if (backdrop.id === 'cloud-upload-modal') return;
+        closeAllModals();
+      }
     });
   });
 
@@ -242,32 +248,48 @@ function closeAllModals() {
 
 function setupDropzone(library) {
   const dropzone = document.getElementById('rom-dropzone');
-  if (!dropzone) return;
+  const cloudDropzone = document.getElementById('cloud-dropzone');
 
-  dropzone.addEventListener('click', () => {
-    document.getElementById('file-input')?.click();
-  });
+  if (dropzone) {
+    dropzone.addEventListener('click', () => {
+      document.getElementById('file-input')?.click();
+    });
+  }
 
   ['dragenter', 'dragover'].forEach((eventName) => {
     window.addEventListener(eventName, (e) => {
       e.preventDefault();
-      dropzone.classList.add('dragover');
+      if (dropzone) dropzone.classList.add('dragover');
+      if (cloudDropzone) cloudDropzone.classList.add('dragover');
     });
   });
 
   ['dragleave', 'drop'].forEach((eventName) => {
     window.addEventListener(eventName, (e) => {
       e.preventDefault();
-      dropzone.classList.remove('dragover');
+      if (dropzone) dropzone.classList.remove('dragover');
+      if (cloudDropzone) cloudDropzone.classList.remove('dragover');
     });
   });
 
   window.addEventListener('drop', (e) => {
+    e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (file) {
-      library.importFile(file);
+      library.handleGameFileIngestion(file);
     }
   });
+
+  if (cloudDropzone) {
+    cloudDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer?.files?.[0];
+      if (file) {
+        library.handleGameFileIngestion(file);
+      }
+    });
+  }
 }
 
 function setupFullscreen(frameEl) {
@@ -296,4 +318,142 @@ function setupFullscreen(frameEl) {
       frameEl.classList.remove('fullscreen');
     }
   });
+}
+
+function setupCloudAuth(library) {
+  const supabase = SupabaseService.getInstance();
+  const btnCloudSync = document.getElementById('btn-cloud-sync');
+  const cloudAuthModal = document.getElementById('cloud-auth-modal');
+  const labelEl = document.getElementById('cloud-sync-label');
+
+  const sessionActiveBox = document.getElementById('auth-session-active');
+  const userEmailEl = document.getElementById('auth-user-email');
+  const formBox = document.getElementById('auth-form-container');
+
+  const btnSignIn = document.getElementById('btn-auth-signin');
+  const btnSignUp = document.getElementById('btn-auth-signup');
+  const btnGuest = document.getElementById('btn-auth-guest');
+  const btnSignOut = document.getElementById('btn-auth-signout');
+
+  const emailInput = document.getElementById('auth-input-email');
+  const passInput = document.getElementById('auth-input-password');
+
+  const cfgUrlInput = document.getElementById('cfg-supabase-url');
+  const cfgKeyInput = document.getElementById('cfg-supabase-key');
+  const btnSaveCfg = document.getElementById('btn-save-supabase-cfg');
+
+  // Fill existing config
+  if (cfgUrlInput && cfgKeyInput) {
+    cfgUrlInput.value = localStorage.getItem('zyqora_supabase_url') || import.meta.env.VITE_SUPABASE_URL || '';
+    cfgKeyInput.value = localStorage.getItem('zyqora_supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  }
+
+  // Open modal
+  if (btnCloudSync && cloudAuthModal) {
+    btnCloudSync.addEventListener('click', () => {
+      closeAllModals();
+      cloudAuthModal.classList.add('open');
+    });
+  }
+
+  // Listen for user changes
+  supabase.onAuthChange((user) => {
+    if (user) {
+      if (sessionActiveBox) sessionActiveBox.style.display = 'block';
+      if (formBox) formBox.style.display = 'none';
+      if (userEmailEl) userEmailEl.textContent = user.email || 'Anonymous Guest';
+      if (labelEl) labelEl.textContent = user.email ? user.email.split('@')[0] : 'Cloud Active';
+    } else {
+      if (sessionActiveBox) sessionActiveBox.style.display = 'none';
+      if (formBox) formBox.style.display = 'block';
+      if (labelEl) labelEl.textContent = 'Cloud';
+    }
+  });
+
+  // Sign In
+  if (btnSignIn && emailInput && passInput) {
+    btnSignIn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const pass = passInput.value.trim();
+      if (!email || !pass) {
+        showToast('Please enter both email and password', 'warn');
+        return;
+      }
+      try {
+        btnSignIn.textContent = 'Signing in...';
+        await supabase.signInWithPassword(email, pass);
+        showToast('Signed in to Supabase!', 'success');
+        closeAllModals();
+        library.loadCloudGames();
+      } catch (e) {
+        showToast(`Sign in error: ${e.message}`, 'error');
+      } finally {
+        btnSignIn.textContent = 'Sign In';
+      }
+    });
+  }
+
+  // Sign Up
+  if (btnSignUp && emailInput && passInput) {
+    btnSignUp.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const pass = passInput.value.trim();
+      if (!email || !pass) {
+        showToast('Please enter both email and password', 'warn');
+        return;
+      }
+      try {
+        btnSignUp.textContent = 'Signing up...';
+        await supabase.signUp(email, pass);
+        showToast('Sign up successful! Check email if confirmation is enabled.', 'success');
+      } catch (e) {
+        showToast(`Sign up error: ${e.message}`, 'error');
+      } finally {
+        btnSignUp.textContent = 'Sign Up';
+      }
+    });
+  }
+
+  // Guest / Anonymous
+  if (btnGuest) {
+    btnGuest.addEventListener('click', async () => {
+      try {
+        btnGuest.textContent = 'Creating session...';
+        await supabase.signInAnonymously();
+        showToast('Signed in as Guest!', 'success');
+        closeAllModals();
+        library.loadCloudGames();
+      } catch (e) {
+        showToast(`Guest session error: ${e.message}`, 'error');
+      } finally {
+        btnGuest.textContent = 'Guest Session (Anonymous Auth)';
+      }
+    });
+  }
+
+  // Sign Out
+  if (btnSignOut) {
+    btnSignOut.addEventListener('click', async () => {
+      await supabase.signOut();
+      showToast('Signed out of Supabase', 'info');
+    });
+  }
+
+  // Save Credentials
+  if (btnSaveCfg && cfgUrlInput && cfgKeyInput) {
+    btnSaveCfg.addEventListener('click', () => {
+      const url = cfgUrlInput.value.trim();
+      const key = cfgKeyInput.value.trim();
+      if (!url || !key) {
+        showToast('Please provide both Project URL and Anon Key', 'warn');
+        return;
+      }
+      const ok = supabase.setCustomCredentials(url, key);
+      if (ok) {
+        showToast('Supabase credentials saved successfully!', 'success');
+      } else {
+        showToast('Failed to initialize Supabase with provided credentials', 'error');
+      }
+    });
+  }
 }

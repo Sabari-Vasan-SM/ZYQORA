@@ -29,8 +29,8 @@ SoftwareRendering = False
 DisplayRefreshRate = 60
 FrameRate = 60
 FrameRate2 = -1
-FrameSkip = 1
-AutoFrameSkip = True
+FrameSkip = 0
+AutoFrameSkip = False
 VerticalSync = True
 LowLatencyPresent = True
 InternalResolution = 1
@@ -69,18 +69,25 @@ An.Left = 1-38
 An.Right = 1-40
 `;
 
+import { RemoteGameFile } from '../streaming/RemoteGameFile.ts';
+import { StreamVirtualFileAdapter } from './stream-virtual-file.ts';
+
 export class EmulatorManager {
   constructor(canvasElement, options = {}) {
     this.canvas = canvasElement;
     this.onStatusChange = options.onStatusChange || (() => {});
     this.onToast = options.onToast || (() => {});
     this.onResolutionChange = options.onResolutionChange || (() => {});
+    this.onStreamingMetrics = options.onStreamingMetrics || (() => {});
 
     this.isLoaded = false;
     this.isRunning = false;
     this.audioContext = null;
     this.activeGameName = null;
     this.internalResolution = 1;
+
+    this.remoteGameFile = null;
+    this.streamAdapter = null;
 
     this.initAudioContext();
   }
@@ -133,8 +140,29 @@ export class EmulatorManager {
     try {
       let buffer = null;
       let filename = 'game.pbp';
+      let streamAdapter = null;
 
-      if (gameData.file) {
+      if (gameData.isCloudStream && gameData.streamUrl) {
+        this.onStatusChange('loading', `Connecting to cloud stream for ${gameData.name}...`);
+        this.remoteGameFile = new RemoteGameFile(gameData.streamUrl, {
+          gameVersionId: gameData.id,
+          isChunked: gameData.isChunked || false,
+          partSize: gameData.partSize || 40 * 1024 * 1024,
+          totalFileSize: gameData.sizeBytes || 0,
+          maxCacheSize: 128 * 1024 * 1024,
+          getPartUrl: gameData.getPartUrl,
+          onMetrics: (metrics) => {
+            this.onStreamingMetrics(metrics, gameData.sizeBytes);
+          },
+        });
+
+        streamAdapter = new StreamVirtualFileAdapter(this.remoteGameFile);
+        this.streamAdapter = streamAdapter;
+        const bootInfo = await streamAdapter.prepareBootSectors((msg) => this.onStatusChange('loading', msg));
+        filename = gameData.fileName || 'cloud_stream.iso';
+        this.onToast(`Stream ready: Cached ${(bootInfo.bootTransferredBytes / (1024 * 1024)).toFixed(1)} MB of ${(bootInfo.totalSize / (1024 * 1024)).toFixed(0)} MB`, 'info');
+
+      } else if (gameData.file) {
         buffer = await gameData.file.arrayBuffer();
         filename = gameData.file.name || 'game.iso';
       } else if (gameData.blob) {
@@ -148,7 +176,7 @@ export class EmulatorManager {
       }
 
       this.activeGameName = gameData.name;
-      await this.bootModule(buffer, filename);
+      await this.bootModule(buffer, filename, streamAdapter);
 
       // Free buffer from JS memory immediately
       buffer = null;
@@ -166,7 +194,7 @@ export class EmulatorManager {
     }
   }
 
-  async bootModule(gameBuffer, filename) {
+  async bootModule(gameBuffer, filename, streamAdapter = null) {
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const virtualPath = `/games/${safeName}`;
 
@@ -203,7 +231,13 @@ export class EmulatorManager {
               const FS = window.FS;
               // 1. Create games directory and mount game
               FS.mkdirTree('/games');
-              if (gameBuffer) {
+
+              if (streamAdapter) {
+                // On-demand streaming virtual file
+                streamAdapter.mountToFS(FS, virtualPath);
+                console.log(`[ZYQORA] Successfully mounted on-demand cloud stream at ${virtualPath}`);
+              } else if (gameBuffer) {
+                // Static buffered file
                 FS.writeFile(virtualPath, new Uint8Array(gameBuffer));
                 console.log(`[ZYQORA] Mounted game file at ${virtualPath} (${gameBuffer.byteLength} bytes)`);
                 gameBuffer = null; // Release ArrayBuffer to allow GC reclamation
