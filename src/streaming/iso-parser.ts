@@ -1,0 +1,185 @@
+/**
+ * Fast ISO 9660 Sector Parser for PlayStation Portable (PSP) Images
+ * Discovers Volume Descriptor, Directory Records, PARAM.SFO, and EBOOT.BIN sector locations
+ * enabling instant boot with < 1% data transfer.
+ */
+
+import { RemoteGameFile } from './RemoteGameFile.ts';
+
+export interface PSPBootMetadata {
+  title: string;
+  gameId: string;
+  totalSizeBytes: number;
+  rootDirectorySector: number;
+  paramSfoSector?: number;
+  paramSfoSize?: number;
+  ebootSector?: number;
+  ebootSizeBytes?: number;
+  bootByteRanges: Array<{ start: number; end: number }>;
+}
+
+export class ISOParser {
+  private file: RemoteGameFile;
+
+  constructor(file: RemoteGameFile) {
+    this.file = file;
+  }
+
+  /**
+   * Parse the ISO 9660 PVD and discover exact sectors needed to boot
+   */
+  async parseBootMetadata(): Promise<PSPBootMetadata> {
+    const totalSize = await this.file.open();
+
+    // 1. Read Sector 16: Primary Volume Descriptor (Offset 32768 = 0x8000)
+    const pvdBytes = await this.file.read(32768, 2048);
+
+    // Verify 'CD001' signature at byte offset 1-5
+    const id = String.fromCharCode(...pvdBytes.subarray(1, 6));
+    if (id !== 'CD001') {
+      throw new Error(`Invalid ISO 9660 image: expected "CD001" at sector 16, got "${id}"`);
+    }
+
+    // Volume Title (Bytes 40-71)
+    const rawTitle = new TextDecoder().decode(pvdBytes.subarray(40, 72)).trim();
+
+    // Root Directory Record starts at byte 156 of PVD
+    const rootDirRecord = pvdBytes.subarray(156, 190);
+    const rootLbn = this.readUint32LE(rootDirRecord, 2);
+    const rootLength = this.readUint32LE(rootDirRecord, 10);
+
+    const metadata: PSPBootMetadata = {
+      title: rawTitle || 'PSP Game',
+      gameId: 'PSP_GAME',
+      totalSizeBytes: totalSize,
+      rootDirectorySector: rootLbn,
+      bootByteRanges: [
+        { start: 0, end: 65535 }, // Sectors 0-31: System area + PVD + VD terminators (64 KB)
+      ],
+    };
+
+    // 2. Read Root Directory to find 'PSP_GAME' directory record
+    const rootBytes = await this.file.read(rootLbn * 2048, Math.min(rootLength, 32768));
+    const rootEntries = this.parseDirectoryEntries(rootBytes);
+    const pspGameEntry = rootEntries.find((e) => e.name.toUpperCase() === 'PSP_GAME');
+
+    if (pspGameEntry) {
+      // 3. Read PSP_GAME directory to find PARAM.SFO and SYSDIR
+      const pspGameBytes = await this.file.read(pspGameEntry.lbn * 2048, Math.min(pspGameEntry.length, 65536));
+      const pspGameEntries = this.parseDirectoryEntries(pspGameBytes);
+
+      // Find PARAM.SFO
+      const paramSfo = pspGameEntries.find((e) => e.name.toUpperCase() === 'PARAM.SFO');
+      if (paramSfo) {
+        metadata.paramSfoSector = paramSfo.lbn;
+        metadata.paramSfoSize = paramSfo.length;
+        metadata.bootByteRanges.push({
+          start: paramSfo.lbn * 2048,
+          end: paramSfo.lbn * 2048 + paramSfo.length - 1,
+        });
+
+        // Try reading PARAM.SFO to extract real Title and Game ID
+        try {
+          const sfoBytes = await this.file.read(paramSfo.lbn * 2048, paramSfo.length);
+          const sfoInfo = this.parseParamSfo(sfoBytes);
+          if (sfoInfo.title) metadata.title = sfoInfo.title;
+          if (sfoInfo.discId) metadata.gameId = sfoInfo.discId;
+        } catch (_) {}
+      }
+
+      // Find SYSDIR directory
+      const sysDir = pspGameEntries.find((e) => e.name.toUpperCase() === 'SYSDIR');
+      if (sysDir) {
+        const sysDirBytes = await this.file.read(sysDir.lbn * 2048, Math.min(sysDir.length, 32768));
+        const sysEntries = this.parseDirectoryEntries(sysDirBytes);
+
+        // Find EBOOT.BIN or BOOT.BIN
+        const eboot = sysEntries.find(
+          (e) => e.name.toUpperCase() === 'BOOT.BIN' || e.name.toUpperCase() === 'EBOOT.BIN'
+        );
+
+        if (eboot) {
+          metadata.ebootSector = eboot.lbn;
+          metadata.ebootSizeBytes = eboot.length;
+          metadata.bootByteRanges.push({
+            start: eboot.lbn * 2048,
+            end: eboot.lbn * 2048 + eboot.length - 1,
+          });
+        }
+      }
+    }
+
+    return metadata;
+  }
+
+  private readUint32LE(buf: Uint8Array, offset: number): number {
+    return buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24);
+  }
+
+  private parseDirectoryEntries(dirBytes: Uint8Array): Array<{ name: string; lbn: number; length: number }> {
+    const entries: Array<{ name: string; lbn: number; length: number }> = [];
+    let offset = 0;
+
+    while (offset < dirBytes.length) {
+      const recordLen = dirBytes[offset];
+      if (recordLen === 0) {
+        // Skip padding to next sector
+        offset = Math.ceil((offset + 1) / 2048) * 2048;
+        continue;
+      }
+
+      const lbn = this.readUint32LE(dirBytes, offset + 2);
+      const dataLen = this.readUint32LE(dirBytes, offset + 10);
+      const nameLen = dirBytes[offset + 32];
+      const rawName = String.fromCharCode(...dirBytes.subarray(offset + 33, offset + 33 + nameLen));
+      const cleanName = rawName.split(';')[0]; // Strip ISO 9660 version suffix ';1'
+
+      if (cleanName && cleanName !== '\x00' && cleanName !== '\x01') {
+        entries.push({ name: cleanName, lbn, length: dataLen });
+      }
+
+      offset += recordLen;
+    }
+
+    return entries;
+  }
+
+  private parseParamSfo(sfo: Uint8Array): { title?: string; discId?: string } {
+    if (sfo.length < 20) return {};
+    // SFO Magic: \x00PSF
+    if (sfo[0] !== 0 || sfo[1] !== 0x50 || sfo[2] !== 0x53 || sfo[3] !== 0x46) {
+      return {};
+    }
+
+    const keyTableOffset = this.readUint32LE(sfo, 8);
+    const dataTableOffset = this.readUint32LE(sfo, 12);
+    const totalEntries = this.readUint32LE(sfo, 16);
+
+    const result: { title?: string; discId?: string } = {};
+
+    for (let i = 0; i < totalEntries; i++) {
+      const entryOffset = 20 + i * 16;
+      const keyOffset = sfo[entryOffset] | (sfo[entryOffset + 1] << 8);
+      const dataOffset = this.readUint32LE(sfo, entryOffset + 12);
+
+      // Read key string from key table
+      let key = '';
+      let k = keyTableOffset + keyOffset;
+      while (k < sfo.length && sfo[k] !== 0) {
+        key += String.fromCharCode(sfo[k++]);
+      }
+
+      // Read value
+      let val = '';
+      let d = dataTableOffset + dataOffset;
+      while (d < sfo.length && sfo[d] !== 0) {
+        val += String.fromCharCode(sfo[d++]);
+      }
+
+      if (key === 'TITLE') result.title = val;
+      if (key === 'DISC_ID') result.discId = val;
+    }
+
+    return result;
+  }
+}

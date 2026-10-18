@@ -71,6 +71,13 @@
           </svg>
         </button>
 
+        <button class="btn-primary" id="btn-cloud-sync" style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; padding: 6px 12px; gap: 6px;" title="Supabase Cloud Streaming & Auth">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+          </svg>
+          <span id="cloud-sync-label">Cloud</span>
+        </button>
+
         <button class="btn-icon" id="btn-open-settings" title="Emulator Settings">
           <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="3"></circle>
@@ -136,6 +143,22 @@
           <div class="hud-row">
             <span>Heap:</span>
             <span class="hud-val" id="hud-mem">34 MB</span>
+          </div>
+          <div class="hud-row" id="hud-stream-row" style="display: none; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 4px; margin-top: 4px;">
+            <span>Stream:</span>
+            <span class="hud-val" id="hud-stream-bytes">0 / 0 MB</span>
+          </div>
+          <div class="hud-row" id="hud-stream-cache-row" style="display: none;">
+            <span>Hit Rate:</span>
+            <span class="hud-val fps-good" id="hud-stream-cache">100%</span>
+          </div>
+          <div class="hud-row" id="hud-stream-latency-row" style="display: none;">
+            <span>Latency:</span>
+            <span class="hud-val" id="hud-stream-latency">0 ms</span>
+          </div>
+          <div class="hud-row" id="hud-stream-state-row" style="display: none;">
+            <span>State:</span>
+            <span class="hud-val fps-good" id="hud-stream-state">Idle</span>
           </div>
         </div>
 
@@ -238,25 +261,87 @@
           <button class="btn-icon close-modal-btn">✕</button>
         </div>
         <div class="modal-body">
-          <!-- Dropzone -->
-          <div class="dropzone-box" id="rom-dropzone">
-            <svg class="dropzone-icon" viewBox="0 0 24 24">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <div style="font-weight: 600; color: #fff;">Drag & drop your PSP ROMs here</div>
-            <div style="font-size: 12px; color: var(--text-muted);">
-              Supports .ISO, .CSO, .CHD, .PBP, .ELF, and .PRX files
+          <!-- Library Navigation Tabs -->
+          <div class="tabs-header" style="margin-bottom: 16px;">
+            <button class="tab-btn active" id="tab-btn-local">Homebrew & Local</button>
+            <button class="tab-btn" id="tab-btn-cloud">Cloud Games (Supabase)</button>
+          </div>
+
+          <!-- Tab 1: Local & Homebrew Pane -->
+          <div id="pane-local-games">
+            <!-- Dropzone -->
+            <div class="dropzone-box" id="rom-dropzone">
+              <svg class="dropzone-icon" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <div style="font-weight: 600; color: #fff;">Drag & drop your PSP ROMs here</div>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                Supports .ISO, .CSO, .CHD, .PBP, .ELF, and .PRX files
+              </div>
+            </div>
+
+            <!-- Games List -->
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 16px;">
+              Available Games & Demos
+            </div>
+            <div class="games-grid" id="games-grid">
+              <!-- Dynamically populated -->
             </div>
           </div>
 
-          <!-- Games List -->
-          <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
-            Available Games & Demos
-          </div>
-          <div class="games-grid" id="games-grid">
-            <!-- Dynamically populated -->
+          <!-- Tab 2: Cloud Games Pane (Supabase) -->
+          <div id="pane-cloud-games" style="display: none;">
+            <!-- Cloud Upload Box -->
+            <div class="dropzone-box" id="cloud-dropzone" style="border-color: rgba(14, 165, 233, 0.4); background: rgba(14, 165, 233, 0.05);">
+              <input type="file" id="cloud-file-input" accept=".iso,.cso,.chd,.pbp,.elf,.prx" style="display: none;" />
+              <svg class="dropzone-icon" viewBox="0 0 24 24" style="stroke: #38bdf8;">
+                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+                <polyline points="16 16 12 12 8 16"></polyline>
+                <line x1="12" y1="12" x2="12" y2="21"></line>
+              </svg>
+              <div style="font-weight: 600; color: #fff;">Upload Game to Private Supabase Storage</div>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                Files are stored securely in your private <code style="color: #38bdf8;">user-games</code> bucket and streamed on-demand
+              </div>
+              <button class="btn-primary" id="btn-browse-cloud-upload" style="margin-top: 10px; background: #0284c7;">
+                Select ISO to Upload
+              </button>
+            </div>
+
+            <!-- Upload Progress Bar (hidden by default) -->
+            <div id="cloud-upload-progress" style="display: none; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                <span id="upload-status-text" style="color: #38bdf8; font-weight: 600;">Uploading game...</span>
+                <span id="upload-percent-text" style="color: #fff; font-family: var(--font-mono);">0%</span>
+              </div>
+              <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden;">
+                <div id="upload-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8); transition: width 0.2s;"></div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <button class="btn-icon" id="btn-cancel-upload" style="font-size: 11px; padding: 4px 8px; width: auto; height: auto;">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Cloud Games List Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; margin-bottom: 8px;">
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+                Your Cloud Games (Stream On-Demand)
+              </div>
+              <button class="btn-icon" id="btn-refresh-cloud" title="Refresh Cloud Games" style="width: 28px; height: 28px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Cloud Games Grid -->
+            <div class="games-grid" id="cloud-games-grid">
+              <!-- Dynamically populated from Supabase -->
+            </div>
           </div>
         </div>
       </div>
@@ -385,6 +470,74 @@
               <span style="color: var(--accent-cyan); font-family: var(--font-mono); font-size: 12px;">IndexedDB / OPFS</span>
             </div>
           </div>
+        </div>
+      </div>
+    <!-- Cloud Auth & Supabase Settings Modal -->
+    <div class="modal-backdrop" id="cloud-auth-modal">
+      <div class="modal-card" style="max-width: 480px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+            </svg>
+            <span>Supabase Cloud Sync</span>
+          </div>
+          <button class="btn-icon close-modal-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- State 1: Active User Session -->
+          <div id="auth-session-active" style="display: none; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: 700; letter-spacing: 0.5px;">Connected Account</div>
+            <div id="auth-user-email" style="font-size: 14px; font-weight: 600; color: #fff; margin-top: 4px;">user@example.com</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Private Storage Bucket: <code style="color: #38bdf8;">user-games</code> (RLS Active)</div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn-primary" id="btn-auth-signout" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; padding: 6px 14px;">Sign Out</button>
+            </div>
+          </div>
+
+          <!-- State 2: Login / Signup Form -->
+          <div id="auth-form-container">
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5;">
+              Sign in to stream your personal PSP games on-demand using private Supabase Storage and HTTP byte-range requests.
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px;">Email</label>
+              <input type="email" id="auth-input-email" placeholder="gamer@example.com" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 13px;" />
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px;">Password</label>
+              <input type="password" id="auth-input-password" placeholder="••••••••" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 13px;" />
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <button class="btn-primary" id="btn-auth-signin" style="flex: 1; justify-content: center;">Sign In</button>
+              <button class="btn-primary" id="btn-auth-signup" style="flex: 1; justify-content: center; background: rgba(255, 255, 255, 0.08); border-color: var(--border-subtle);">Sign Up</button>
+            </div>
+
+            <div style="text-align: center; margin: 12px 0; font-size: 11px; color: var(--text-dim);">OR</div>
+
+            <button class="btn-primary" id="btn-auth-guest" style="width: 100%; justify-content: center; background: rgba(14, 165, 233, 0.1); border-color: rgba(14, 165, 233, 0.3); color: #38bdf8;">
+              Guest Session (Anonymous Auth)
+            </button>
+          </div>
+
+          <!-- Supabase Credentials (Custom URL / Anon Key toggle) -->
+          <details style="margin-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px;">
+            <summary style="font-size: 11.5px; color: var(--text-muted); cursor: pointer; user-select: none;">Custom Supabase Project Credentials</summary>
+            <div style="margin-top: 10px;">
+              <div style="margin-bottom: 8px;">
+                <label style="display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px;">Project URL</label>
+                <input type="text" id="cfg-supabase-url" placeholder="https://xyz.supabase.co" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px 10px; color: #fff; font-size: 11px; font-family: var(--font-mono);" />
+              </div>
+              <div style="margin-bottom: 8px;">
+                <label style="display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px;">Anon / Publishable Key</label>
+                <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOi..." style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px 10px; color: #fff; font-size: 11px; font-family: var(--font-mono);" />
+              </div>
+              <button class="btn-icon" id="btn-save-supabase-cfg" style="width: auto; padding: 4px 12px; font-size: 11px;">Save Credentials</button>
+            </div>
+          </details>
         </div>
       </div>
     </div>
