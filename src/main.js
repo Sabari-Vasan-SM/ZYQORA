@@ -19,7 +19,7 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
-  }, 3200);
+  }, 3500);
 }
 
 // Status dot & text helper
@@ -35,7 +35,7 @@ function setStatus(state, text) {
 }
 
 // Initialize Application once DOM is ready
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('canvas');
   const welcomeOverlay = document.getElementById('welcome-overlay');
   const pspFrame = document.getElementById('psp-frame');
@@ -86,8 +86,6 @@ window.addEventListener('DOMContentLoaded', () => {
     (msg, type) => showToast(msg, type)
   );
 
-  library.render('games-grid');
-
   // Setup UI Interactions
   setupHeaderControls(emulator, library, touch, hud);
   setupWelcomeOverlay(emulator, library);
@@ -96,7 +94,22 @@ window.addEventListener('DOMContentLoaded', () => {
   setupFullscreen(pspFrame);
 
   // Set default resolution in HUD
-  hud.setResolution(2);
+  hud.setResolution(1);
+
+  // Wait for library DB to load and check for autorun game
+  setTimeout(() => {
+    library.render('games-grid');
+    const autoRunId = sessionStorage.getItem('zyqora_autorun_game_id');
+    if (autoRunId) {
+      sessionStorage.removeItem('zyqora_autorun_game_id');
+      const allGames = [...library.preloadedGames, ...library.userGames];
+      const match = allGames.find((g) => g.id === autoRunId);
+      if (match) {
+        console.log('[ZYQORA] Auto-running game from reload:', match.name);
+        emulator.launchGame(match);
+      }
+    }
+  }, 300);
 });
 
 function setupHeaderControls(emulator, library, touch, hud) {

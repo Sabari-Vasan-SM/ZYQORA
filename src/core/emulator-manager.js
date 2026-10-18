@@ -1,6 +1,74 @@
 /**
  * WebAssembly PPSSPP Core Bridge and Lifecycle Manager
+ * Includes comprehensive ppsspp.ini stability patches for commercial games (God of War, Tekken 6, etc.)
+ * Optimized for CPU thermals, memory footprint, and frame pacing.
  */
+
+const PPSSPP_INI_CONTENT = `[General]
+FirstRun = False
+CurrentDirectory = /games
+IgnoreBadMemAccess = True
+ForceLagSync2 = True
+UIScale = 1
+AutoLoadSaveState = 0
+
+[CPU]
+FastMemoryAccess = False
+SeparateSASThread = False
+SeparateIOThread = False
+IOTimingMethod = 0
+
+[SystemParam]
+PSPModel = 1
+NickName = PPSSPP
+Language = 1
+
+[Graphics]
+RenderingMode = 1
+SoftwareRendering = False
+DisplayRefreshRate = 60
+FrameRate = 60
+FrameRate2 = -1
+FrameSkip = 1
+AutoFrameSkip = True
+VerticalSync = True
+LowLatencyPresent = True
+InternalResolution = 1
+SkipBufferEffects = False
+DisableSlowFramebufReads = True
+VertexCache = True
+TextureBackingToFile = False
+
+[Sound]
+Enable = True
+ExtraAudioBuffering = True
+AudioBufferSize = 2048
+FillAudioGaps = True
+AudioSyncMode = 0
+
+[Control]
+ShowTouchControls = False
+`;
+
+const CONTROLS_INI_CONTENT = `[ControlMapping]
+Up = 1-19
+Down = 1-20
+Left = 1-21
+Right = 1-22
+Circle = 1-52,1-54
+Cross = 1-54,1-52
+Square = 1-29
+Triangle = 1-47
+Start = 1-62,1-66
+Select = 1-50,1-59
+L = 1-45
+R = 1-51
+An.Up = 1-37
+An.Down = 1-39
+An.Left = 1-38
+An.Right = 1-40
+`;
+
 export class EmulatorManager {
   constructor(canvasElement, options = {}) {
     this.canvas = canvasElement;
@@ -12,7 +80,7 @@ export class EmulatorManager {
     this.isRunning = false;
     this.audioContext = null;
     this.activeGameName = null;
-    this.internalResolution = 2; // 2x (960x544) default for sharp rendering
+    this.internalResolution = 1;
 
     this.initAudioContext();
   }
@@ -47,18 +115,29 @@ export class EmulatorManager {
   }
 
   /**
-   * Boot the WebAssembly core with an optional initial game
+   * Boot the WebAssembly core with an initial game
    */
   async launchGame(gameData) {
     this.unlockAudio();
     this.onStatusChange('loading', `Preparing ${gameData.name}...`);
     this.onToast(`Loading ${gameData.name}...`, 'info');
 
+    // If emulator is already running in this tab, clean reload is necessary
+    if (this.isLoaded) {
+      sessionStorage.setItem('zyqora_autorun_game_id', gameData.id);
+      this.onToast(`Switching to ${gameData.name}...`, 'info');
+      setTimeout(() => window.location.reload(), 400);
+      return;
+    }
+
     try {
       let buffer = null;
       let filename = 'game.pbp';
 
-      if (gameData.blob) {
+      if (gameData.file) {
+        buffer = await gameData.file.arrayBuffer();
+        filename = gameData.file.name || 'game.iso';
+      } else if (gameData.blob) {
         buffer = await gameData.blob.arrayBuffer();
         filename = gameData.fileName || 'game.iso';
       } else if (gameData.url) {
@@ -69,17 +148,14 @@ export class EmulatorManager {
       }
 
       this.activeGameName = gameData.name;
+      await this.bootModule(buffer, filename);
 
-      if (!this.isLoaded) {
-        await this.bootModule(buffer, filename);
-      } else {
-        // Runtime already active: write game and call main
-        await this.hotloadGame(buffer, filename);
-      }
+      // Free buffer from JS memory immediately
+      buffer = null;
 
       this.isRunning = true;
       this.onStatusChange('active', gameData.name);
-      this.onToast(`${gameData.name} running!`, 'success');
+      this.onToast(`${gameData.name} running! Tap ✕ or press Enter to advance`, 'success');
 
       // Focus canvas for immediate input capture
       this.canvas.focus();
@@ -108,7 +184,7 @@ export class EmulatorManager {
           failIfMajorPerformanceCaveat: false,
         },
         SDL2: this.audioContext ? { audioContext: this.audioContext } : {},
-        arguments: ['--dpi', '1', virtualPath],
+        arguments: [virtualPath],
         locateFile(path) {
           return '/ppsspp/' + path;
         },
@@ -124,13 +200,38 @@ export class EmulatorManager {
         preRun: [
           () => {
             try {
-              window.FS.mkdirTree('/games');
+              const FS = window.FS;
+              // 1. Create games directory and mount game
+              FS.mkdirTree('/games');
               if (gameBuffer) {
-                window.FS.writeFile(virtualPath, new Uint8Array(gameBuffer));
+                FS.writeFile(virtualPath, new Uint8Array(gameBuffer));
                 console.log(`[ZYQORA] Mounted game file at ${virtualPath} (${gameBuffer.byteLength} bytes)`);
+                gameBuffer = null; // Release ArrayBuffer to allow GC reclamation
               }
+
+              // 2. Write ppsspp.ini and controls.ini with 64MB PSPModel and stability fixes
+              const configRoots = [
+                '/home/web_user/.config/ppsspp',
+                '/root/.config/ppsspp',
+                '/.config/ppsspp',
+                '',
+              ];
+
+              const encoder = new TextEncoder();
+              const iniBytes = encoder.encode(PPSSPP_INI_CONTENT);
+              const ctrlBytes = encoder.encode(CONTROLS_INI_CONTENT);
+
+              configRoots.forEach((root) => {
+                const sysDir = root ? `${root}/PSP/SYSTEM` : '/PSP/SYSTEM';
+                try {
+                  FS.mkdirTree(sysDir);
+                  FS.writeFile(`${sysDir}/ppsspp.ini`, iniBytes);
+                  FS.writeFile(`${sysDir}/controls.ini`, ctrlBytes);
+                  console.log(`[ZYQORA] Injected ppsspp.ini and controls.ini at ${sysDir}`);
+                } catch (_) {}
+              });
             } catch (e) {
-              console.error('[ZYQORA] preRun error:', e);
+              console.error('[ZYQORA] preRun initialization error:', e);
             }
           },
         ],
@@ -155,73 +256,71 @@ export class EmulatorManager {
     });
   }
 
-  async hotloadGame(gameBuffer, filename) {
-    if (!window.FS) throw new Error('Virtual filesystem not ready');
-    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const virtualPath = `/games/${safeName}`;
-
-    window.FS.mkdirTree('/games');
-    window.FS.writeFile(virtualPath, new Uint8Array(gameBuffer));
-
-    if (window.Module && window.Module.callMain) {
-      window.Module.callMain([virtualPath]);
-    }
-  }
-
   /* Shortcut helpers */
   saveState() {
-    this.dispatchSpecialKey('F3', 114);
+    this.dispatchSpecialKey('F3', 114, 'F3');
     this.onToast('State Saved (F3)', 'success');
   }
 
   loadState() {
-    this.dispatchSpecialKey('F4', 115);
+    this.dispatchSpecialKey('F4', 115, 'F4');
     this.onToast('State Loaded (F4)', 'info');
   }
 
   nextSlot() {
-    this.dispatchSpecialKey('F2', 113);
+    this.dispatchSpecialKey('F2', 113, 'F2');
     this.onToast('Next Save Slot (F2)', 'info');
   }
 
   prevSlot() {
-    this.dispatchSpecialKey('F1', 112);
+    this.dispatchSpecialKey('F1', 112, 'F1');
     this.onToast('Previous Save Slot (F1)', 'info');
   }
 
   togglePause() {
-    this.dispatchSpecialKey('Escape', 27);
+    this.dispatchSpecialKey('Escape', 27, 'Escape');
     this.onToast('Pause / Menu (Esc)', 'info');
   }
 
   fastForward() {
-    this.dispatchSpecialKey('F7', 118);
+    this.dispatchSpecialKey('F7', 118, 'F7');
     this.onToast('Fast-Forward Toggled (F7)', 'info');
   }
 
-  dispatchSpecialKey(key, keyCode) {
-    const target = this.canvas || window;
+  dispatchSpecialKey(key, keyCode, code = 'KeyX') {
+    const canvas = this.canvas || document.getElementById('canvas');
     const downEvt = new KeyboardEvent('keydown', {
       bubbles: true,
       cancelable: true,
+      view: window,
       key,
-      code: key,
+      code,
       keyCode,
       which: keyCode,
     });
+    Object.defineProperty(downEvt, 'keyCode', { get: () => keyCode });
+    Object.defineProperty(downEvt, 'which', { get: () => keyCode });
+
     const upEvt = new KeyboardEvent('keyup', {
       bubbles: true,
       cancelable: true,
+      view: window,
       key,
-      code: key,
+      code,
       keyCode,
       which: keyCode,
     });
-    target.dispatchEvent(downEvt);
+    Object.defineProperty(upEvt, 'keyCode', { get: () => keyCode });
+    Object.defineProperty(upEvt, 'which', { get: () => keyCode });
+
+    if (canvas) canvas.dispatchEvent(downEvt);
+    document.dispatchEvent(downEvt);
     window.dispatchEvent(downEvt);
+
     setTimeout(() => {
-      target.dispatchEvent(upEvt);
+      if (canvas) canvas.dispatchEvent(upEvt);
+      document.dispatchEvent(upEvt);
       window.dispatchEvent(upEvt);
-    }, 50);
+    }, 80);
   }
 }
