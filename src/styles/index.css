@@ -73,6 +73,7 @@ body::before {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   z-index: 1;
@@ -1057,25 +1058,488 @@ input:checked + .slider:before {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   RESPONSIVE DESIGN (MOBILE & TABLET ADAPTATION)
+   RESPONSIVE DESIGN (MOBILE, TABLET & HANDHELD ADAPTATION)
    ═══════════════════════════════════════════════════════════════════ */
+
+/* Universal Safe Area Insets for Mobile Notches & Dynamic Island */
+.app-header {
+  padding-top: max(0px, env(safe-area-inset-top));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+
+.bottom-dock {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+
+/* ─── Tablet & Mobile General (<= 768px) ─── */
 @media (max-width: 768px) {
   .app-header {
-    padding: 0 12px;
+    height: 50px;
+    min-height: 50px;
+    padding: 0 10px;
   }
+
+  .brand-logo {
+    font-size: 15px;
+    gap: 6px;
+  }
+
   .brand-logo span.brand-text {
     display: none;
   }
-  .main-stage {
-    padding: 0;
+
+  .brand-badge {
+    font-size: 9px;
+    padding: 2px 5px;
   }
-  .psp-frame {
-    border-radius: 0;
-    max-width: 100vw;
-  }
-  .performance-hud {
+
+  .status-pill {
+    padding: 3px 6px;
     font-size: 10px;
-    padding: 6px 8px;
-    min-width: 130px;
+  }
+
+  .header-controls {
+    gap: 4px;
+  }
+
+  .btn-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .btn-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Compact button labels to prevent header overflow */
+  .btn-primary {
+    padding: 0;
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+  }
+
+  .btn-primary span {
+    display: none;
+  }
+
+  #btn-cloud-sync {
+    padding: 0 !important;
+    width: 34px !important;
+    height: 34px !important;
+    justify-content: center !important;
+  }
+
+  /* Bottom Dock mobile simplification */
+  .bottom-dock {
+    height: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+  }
+
+  .dock-center {
+    display: none !important; /* Hide wide keyboard shortcut text on mobile */
+  }
+
+  #gamepad-name {
+    display: none;
+  }
+
+  .gamepad-indicator {
+    padding: 4px;
+  }
+
+  /* Performance HUD compact sizing */
+  .performance-hud {
+    top: 8px;
+    left: 8px;
+    font-size: 9.5px;
+    padding: 4px 8px;
+    min-width: auto;
+    gap: 3px;
+    background: rgba(6, 10, 16, 0.88);
+  }
+
+  #frame-time-canvas {
+    height: 16px;
+    display: none; /* Hide graph on small screens to save viewport space */
+  }
+
+  /* Modals Full-Screen / Mobile-Optimized Sheet */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    max-width: 100%;
+    width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+  }
+
+  .modal-header {
+    padding: 14px 18px;
+  }
+
+  .modal-title {
+    font-size: 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .games-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .game-card {
+    padding: 10px 12px;
+  }
+
+  .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .select-input {
+    width: 100%;
+  }
+
+  #cloud-upload-modal .modal-card,
+  #cloud-auth-modal .modal-card {
+    border-radius: var(--radius-lg);
+    margin: auto 12px;
+    width: calc(100% - 24px);
+    max-height: 90vh;
   }
 }
+
+/* ─── Ultra Small Phones (<= 400px width) ─── */
+@media (max-width: 400px) {
+  #status-text {
+    display: none;
+  }
+  .status-pill {
+    padding: 4px 6px;
+  }
+  .header-controls {
+    gap: 2px;
+  }
+  .btn-icon, .btn-primary {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ─── Mobile Portrait: Handheld Dual-Deck Layout ─── */
+@media (max-width: 768px) and (orientation: portrait) {
+  .main-stage {
+    padding: 0;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .psp-frame {
+    width: 100%;
+    height: 100%;
+    max-width: 100vw;
+    border-radius: 0;
+    aspect-ratio: unset;
+    box-shadow: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    background: #04070b;
+  }
+
+  /* Game Canvas stays pinned on top in native 16:9 with ZERO finger obstruction */
+  #canvas {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    max-height: 38vh;
+    max-height: 38dvh;
+    object-fit: contain;
+    background: #000;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+    flex-shrink: 0;
+  }
+
+  .welcome-overlay {
+    height: 38vh;
+    height: 38dvh;
+    bottom: auto;
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .welcome-icon-box {
+    width: 48px;
+    height: 48px;
+  }
+
+  .welcome-title {
+    font-size: 17px;
+  }
+
+  .welcome-subtitle {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .welcome-actions .btn-primary {
+    width: auto;
+    padding: 6px 12px;
+    height: auto;
+    font-size: 11.5px;
+  }
+
+  .welcome-actions .btn-primary span {
+    display: inline;
+  }
+
+  /* Lower Dedicated Tactile Gamepad Deck */
+  .touch-controls-layer {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    display: block !important;
+    opacity: 1;
+    background: radial-gradient(circle at 50% 15%, rgba(16, 24, 38, 0.98), rgba(6, 9, 14, 1));
+    border-top: 1px solid rgba(0, 240, 255, 0.15);
+    box-shadow: inset 0 2px 16px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Shoulder Triggers across top of controller deck */
+  .touch-cluster-top {
+    position: absolute;
+    top: 8px;
+    left: 14px;
+    right: 14px;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .trigger-btn {
+    padding: 8px 18px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Left Thumb Zone: D-Pad & Analog Stick arranged vertically */
+  .touch-cluster-left {
+    position: absolute;
+    left: 12px;
+    top: 48px;
+    bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dpad {
+    width: 104px;
+    height: 104px;
+  }
+
+  .dpad-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dpad-up    { top: 0; left: 34px; }
+  .dpad-down  { bottom: 0; left: 34px; }
+  .dpad-left  { left: 0; top: 34px; }
+  .dpad-right { right: 0; top: 34px; }
+  .dpad-center {
+    top: 34px;
+    left: 34px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .analog-stick {
+    width: 86px;
+    height: 86px;
+  }
+
+  .analog-thumb {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Right Thumb Zone: Action Buttons (△ ○ ✕ ▢) */
+  .touch-cluster-right {
+    position: absolute;
+    right: 14px;
+    top: 48px;
+    bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .action-cluster {
+    width: 120px;
+    height: 120px;
+  }
+
+  .action-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+
+  .btn-triangle { top: 0; left: 40px; }
+  .btn-circle   { right: 0; top: 40px; }
+  .btn-cross    { bottom: 0; left: 40px; }
+  .btn-square   { left: 0; top: 40px; }
+
+  /* System Buttons (Select / Start) at bottom center */
+  .touch-cluster-bottom {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    gap: 12px;
+  }
+
+  .sys-pill-btn {
+    padding: 5px 14px;
+    font-size: 10px;
+  }
+}
+
+/* ─── Mobile Landscape (Compact Full-Width Screen) ─── */
+@media (max-height: 520px) and (orientation: landscape), (max-width: 920px) and (orientation: landscape) {
+  .app-header {
+    height: 38px;
+    min-height: 38px;
+    padding: 0 max(12px, env(safe-area-inset-left));
+  }
+
+  .bottom-dock {
+    height: 34px;
+    min-height: 34px;
+    padding: 0 max(12px, env(safe-area-inset-left));
+  }
+
+  .main-stage {
+    padding: 0;
+    flex: 1;
+  }
+
+  .psp-frame {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    border-radius: 0;
+    aspect-ratio: unset;
+  }
+
+  #canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .touch-controls-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* Ergonomic Thumb Placement for Wide Screen in Landscape */
+  .touch-cluster-left {
+    position: absolute;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: 8px;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 14px;
+    transform: scale(0.8);
+    transform-origin: bottom left;
+  }
+
+  .touch-cluster-right {
+    position: absolute;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: 8px;
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+
+  .touch-cluster-top {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    padding: 0 max(18px, env(safe-area-inset-left));
+  }
+
+  .trigger-btn {
+    padding: 5px 14px;
+    font-size: 10px;
+  }
+
+  .touch-cluster-bottom {
+    bottom: 6px;
+    gap: 10px;
+  }
+
+  .sys-pill-btn {
+    padding: 4px 12px;
+    font-size: 9.5px;
+  }
+
+  /* Hide HUD graph in landscape to keep viewport clean */
+  #frame-time-canvas {
+    display: none;
+  }
+}
+
+/* ─── Fullscreen API Mobile Experience ─── */
+.psp-frame.fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+}
+
+.psp-frame.fullscreen #canvas {
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  object-fit: contain !important;
+}
+
+.psp-frame.fullscreen .touch-controls-layer {
+  position: absolute !important;
+  inset: 0 !important;
+}
+
