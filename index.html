@@ -542,6 +542,47 @@
       </div>
     </div>
 
+    <!-- Dedicated Cloud Upload Progress Modal -->
+    <div class="modal-backdrop" id="cloud-upload-modal">
+      <div class="modal-card" style="max-width: 500px; text-align: center; padding: 28px 24px; border: 1px solid rgba(14, 165, 233, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);">
+        <div style="width: 56px; height: 56px; margin: 0 auto 16px auto; border-radius: 50%; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); display: flex; align-items: center; justify-content: center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+            <polyline points="16 16 12 12 8 16"></polyline>
+            <line x1="12" y1="12" x2="12" y2="21"></line>
+          </svg>
+        </div>
+
+        <h3 id="upload-modal-title" style="margin: 0 0 6px 0; font-size: 18px; color: #fff;">Uploading Game to Supabase</h3>
+        <div id="upload-modal-filename" style="font-size: 13px; color: #38bdf8; font-weight: 600; margin-bottom: 2px;">game.iso</div>
+        <div id="upload-modal-sub" style="font-size: 11px; color: var(--text-dim); margin-bottom: 20px;">
+          Bypassing 50 MB Free Plan limit using automatic 40 MB chunking
+        </div>
+
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 8px;">
+            <span id="upload-modal-part-text" style="color: #38bdf8; font-weight: 600;">Part 1 of 1</span>
+            <span id="upload-modal-pct-text" style="color: #fff; font-family: var(--font-mono); font-weight: 700;">0%</span>
+          </div>
+          <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
+            <div id="upload-modal-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8, #00f0ff); transition: width 0.2s; box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
+            <span id="upload-modal-bytes-text">0 MB / 0 MB</span>
+            <span id="upload-modal-state-text" style="color: #94a3b8;">Uploading to private bucket...</span>
+          </div>
+        </div>
+
+        <div style="font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 16px;">
+          🔒 Files are encrypted and stored in your private <code style="color: #38bdf8;">user-games</code> Supabase storage bucket. Gameplay starts automatically when finished.
+        </div>
+
+        <button class="btn-primary" id="btn-cancel-upload-modal" style="margin: 0 auto; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; padding: 6px 18px;">
+          Cancel Upload
+        </button>
+      </div>
+    </div>
+
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toast-container"></div>
   </div>

@@ -132,7 +132,7 @@ function setupHeaderControls(emulator, library, touch, hud) {
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (file) {
-        library.importFile(file);
+        library.handleGameFileIngestion(file);
       }
       fileInput.value = '';
     });
@@ -192,10 +192,13 @@ function setupModals(emulator) {
     btn.addEventListener('click', closeAllModals);
   });
 
-  // Close on backdrop click
+  // Close on backdrop click (prevent closing cloud-upload-modal during upload)
   document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) closeAllModals();
+      if (e.target === backdrop) {
+        if (backdrop.id === 'cloud-upload-modal') return;
+        closeAllModals();
+      }
     });
   });
 
@@ -245,32 +248,48 @@ function closeAllModals() {
 
 function setupDropzone(library) {
   const dropzone = document.getElementById('rom-dropzone');
-  if (!dropzone) return;
+  const cloudDropzone = document.getElementById('cloud-dropzone');
 
-  dropzone.addEventListener('click', () => {
-    document.getElementById('file-input')?.click();
-  });
+  if (dropzone) {
+    dropzone.addEventListener('click', () => {
+      document.getElementById('file-input')?.click();
+    });
+  }
 
   ['dragenter', 'dragover'].forEach((eventName) => {
     window.addEventListener(eventName, (e) => {
       e.preventDefault();
-      dropzone.classList.add('dragover');
+      if (dropzone) dropzone.classList.add('dragover');
+      if (cloudDropzone) cloudDropzone.classList.add('dragover');
     });
   });
 
   ['dragleave', 'drop'].forEach((eventName) => {
     window.addEventListener(eventName, (e) => {
       e.preventDefault();
-      dropzone.classList.remove('dragover');
+      if (dropzone) dropzone.classList.remove('dragover');
+      if (cloudDropzone) cloudDropzone.classList.remove('dragover');
     });
   });
 
   window.addEventListener('drop', (e) => {
+    e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (file) {
-      library.importFile(file);
+      library.handleGameFileIngestion(file);
     }
   });
+
+  if (cloudDropzone) {
+    cloudDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer?.files?.[0];
+      if (file) {
+        library.handleGameFileIngestion(file);
+      }
+    });
+  }
 }
 
 function setupFullscreen(frameEl) {

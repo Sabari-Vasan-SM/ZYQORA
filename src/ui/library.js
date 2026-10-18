@@ -165,16 +165,8 @@ export class GameLibrary {
     }
   }
 
-  async uploadCloudFile(file) {
+  async handleGameFileIngestion(file) {
     if (!file) return;
-
-    const supabase = SupabaseService.getInstance();
-    if (!supabase.isConfigured() || !supabase.getUser()) {
-      this.showToast('Please sign in to Supabase to upload cloud games.', 'warn');
-      const authModal = document.getElementById('cloud-auth-modal');
-      if (authModal) authModal.classList.add('active');
-      return;
-    }
 
     // Validate extension
     const ext = file.name.split('.').pop().toLowerCase();
@@ -184,45 +176,128 @@ export class GameLibrary {
       return;
     }
 
-    // UI Progress Bar
-    const progressBox = document.getElementById('cloud-upload-progress');
-    const statusText = document.getElementById('upload-status-text');
-    const percentText = document.getElementById('upload-percent-text');
-    const progressBar = document.getElementById('upload-progress-bar');
-    const cancelBtn = document.getElementById('btn-cancel-upload');
+    const supabase = SupabaseService.getInstance();
+    if (!supabase.isConfigured()) {
+      this.showToast('Please configure your Supabase credentials to upload and stream games.', 'warn');
+      const authModal = document.getElementById('cloud-auth-modal');
+      if (authModal) authModal.classList.add('open');
+      return;
+    }
 
-    if (progressBox) progressBox.style.display = 'block';
-    if (statusText) statusText.textContent = `Uploading "${file.name}" to private bucket...`;
+    // Ensure user session (auto-authenticate as anonymous guest if not signed in)
+    if (!supabase.getUser()) {
+      try {
+        this.showToast('Connecting guest cloud session...', 'info');
+        await supabase.signInAnonymously();
+      } catch (authErr) {
+        console.warn('Anonymous sign-in failed, prompting login:', authErr);
+        this.showToast('Please sign in to Supabase to upload cloud games.', 'warn');
+        const authModal = document.getElementById('cloud-auth-modal');
+        if (authModal) authModal.classList.add('open');
+        return;
+      }
+    }
+
+    // Open dedicated Cloud Upload Progress Modal
+    // Close other open modals first
+    document.querySelectorAll('.modal-backdrop').forEach((m) => m.classList.remove('open'));
+    const uploadModal = document.getElementById('cloud-upload-modal');
+    if (uploadModal) uploadModal.classList.add('open');
+
+    // UI elements inside #cloud-upload-modal
+    const titleEl = document.getElementById('upload-modal-title');
+    const filenameEl = document.getElementById('upload-modal-filename');
+    const subEl = document.getElementById('upload-modal-sub');
+    const partText = document.getElementById('upload-modal-part-text');
+    const pctText = document.getElementById('upload-modal-pct-text');
+    const progressBar = document.getElementById('upload-modal-progress-bar');
+    const bytesText = document.getElementById('upload-modal-bytes-text');
+    const stateText = document.getElementById('upload-modal-state-text');
+    const cancelModalBtn = document.getElementById('btn-cancel-upload-modal');
+
+    const title = file.name.replace(/\.[^/.]+$/, '');
+    const isChunked = file.size > 45 * 1024 * 1024;
+    const CHUNK_SIZE = 40 * 1024 * 1024;
+    const totalParts = isChunked ? Math.ceil(file.size / CHUNK_SIZE) : 1;
+
+    if (titleEl) titleEl.textContent = 'Uploading Game to Supabase';
+    if (filenameEl) filenameEl.textContent = `${file.name} (${this.formatBytes(file.size)})`;
+    if (subEl) {
+      subEl.textContent = isChunked
+        ? `Splitting into ${totalParts} chunks (40 MB each) to bypass Supabase Free Plan limit`
+        : 'Storing securely in private user-games bucket for on-demand streaming';
+    }
+    if (progressBar) progressBar.style.width = '0%';
+    if (pctText) pctText.textContent = '0%';
+    if (partText) partText.textContent = isChunked ? `Part 1 of ${totalParts}` : 'Single File';
+    if (bytesText) bytesText.textContent = `0 B / ${this.formatBytes(file.size)}`;
+    if (stateText) stateText.textContent = 'Initializing cloud storage upload...';
+
+    // Cancel controller
+    this.currentUploadAbort = new AbortController();
+    const handleCancel = () => {
+      if (this.currentUploadAbort) {
+        this.currentUploadAbort.abort();
+      }
+    };
+    if (cancelModalBtn) {
+      cancelModalBtn.onclick = handleCancel;
+      cancelModalBtn.disabled = false;
+      cancelModalBtn.style.display = 'block';
+    }
 
     try {
-      const title = file.name.replace(/\.[^/.]+$/, '');
-      const gameRecord = await supabase.uploadGame(file, title, (pct, loaded, total, currentPart, totalParts) => {
-        if (progressBar) progressBar.style.width = `${pct}%`;
-        if (percentText) {
-          if (totalParts && totalParts > 1) {
-            percentText.textContent = `Part ${currentPart}/${totalParts} (${pct}%)`;
+      const gameRecord = await supabase.uploadGame(
+        file,
+        title,
+        (pct, loaded, total, currentPart, partsCount) => {
+          if (progressBar) progressBar.style.width = `${pct}%`;
+          if (pctText) pctText.textContent = `${pct}%`;
+          if (bytesText) bytesText.textContent = `${this.formatBytes(loaded)} / ${this.formatBytes(total)}`;
+          if (partsCount && partsCount > 1) {
+            if (partText) partText.textContent = `Part ${currentPart} of ${partsCount}`;
+            if (stateText) stateText.textContent = `Uploading chunk ${currentPart}/${partsCount} (40 MB)...`;
           } else {
-            percentText.textContent = `${pct}%`;
+            if (partText) partText.textContent = 'Uploading';
+            if (stateText) stateText.textContent = `Uploading to private storage...`;
           }
-        }
-        if (statusText && totalParts && totalParts > 1) {
-          statusText.textContent = `Uploading part ${currentPart} of ${totalParts} (40 MB chunks for Supabase Free Tier)...`;
-        }
-      });
+        },
+        this.currentUploadAbort.signal
+      );
 
-      this.showToast(`Uploaded "${title}" to Supabase!`, 'success');
+      // Finished upload successfully
+      if (titleEl) titleEl.textContent = 'Upload Complete! 🎉';
+      if (stateText) stateText.textContent = 'Connecting on-demand byte-range stream...';
+      if (progressBar) progressBar.style.width = '100%';
+      if (pctText) pctText.textContent = '100%';
+      if (cancelModalBtn) cancelModalBtn.style.display = 'none';
+
+      this.showToast(`Uploaded "${title}" to Supabase! Starting playback...`, 'success');
       await this.loadCloudGames();
 
+      // Give 600ms for user to see the completed state, then close modal and launch game!
+      await new Promise((r) => setTimeout(r, 600));
+      if (uploadModal) uploadModal.classList.remove('open');
+
       // Auto-launch uploaded game via on-demand cloud stream
-      this.selectCloudGame(gameRecord);
+      await this.selectCloudGame(gameRecord);
 
     } catch (err) {
-      console.error('[GameLibrary] Cloud upload error:', err);
-      this.showToast(`Upload failed: ${err.message}`, 'error');
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        this.showToast('Upload cancelled', 'warn');
+      } else {
+        console.error('[GameLibrary] Cloud upload error:', err);
+        this.showToast(`Upload failed: ${err.message}`, 'error');
+      }
+      if (uploadModal) uploadModal.classList.remove('open');
     } finally {
-      if (progressBox) progressBox.style.display = 'none';
+      this.currentUploadAbort = null;
       if (progressBar) progressBar.style.width = '0%';
     }
+  }
+
+  async uploadCloudFile(file) {
+    return this.handleGameFileIngestion(file);
   }
 
   async selectCloudGame(game) {
@@ -297,7 +372,7 @@ export class GameLibrary {
     if (btn) {
       btn.addEventListener('click', () => {
         const authModal = document.getElementById('cloud-auth-modal');
-        if (authModal) authModal.classList.add('active');
+        if (authModal) authModal.classList.add('open');
       });
     }
   }

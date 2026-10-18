@@ -188,7 +188,8 @@ export class SupabaseService {
   public async uploadGame(
     file: File,
     title: string,
-    onProgress?: (percent: number, loaded: number, total: number, currentPart?: number, totalParts?: number) => void
+    onProgress?: (percent: number, loaded: number, total: number, currentPart?: number, totalParts?: number) => void,
+    abortSignal?: AbortSignal
   ): Promise<GameMetadata> {
     if (!this.client || !this.currentUser) throw new Error('Must be signed in to upload games.');
 
@@ -217,6 +218,10 @@ export class SupabaseService {
       if (isChunked) {
         // Upload file in 40 MiB parts to bypass Supabase Free Plan 50 MB limit
         for (let i = 0; i < totalParts; i++) {
+          if (abortSignal?.aborted) {
+            throw new DOMException('Upload aborted by user', 'AbortError');
+          }
+
           const start = i * CHUNK_SIZE;
           const end = Math.min((i + 1) * CHUNK_SIZE, file.size);
           const partBlob = file.slice(start, end);
