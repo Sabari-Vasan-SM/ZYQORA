@@ -383,13 +383,13 @@ export class GameLibrary {
     if (!container) return;
 
     container.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(14, 165, 233, 0.3); border-radius: 8px;">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" style="margin-bottom: 8px;">
+      <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; background: #0c0c0c; border: 1px dashed #333333; border-radius: 6px;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" style="margin-bottom: 8px;">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
         </svg>
-        <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Sign in to Stream Cloud Games</div>
-        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Connect your Supabase account to access private game streaming without downloading ISOs.</div>
-        <button class="btn-primary" id="btn-open-auth-from-library" style="margin: 0 auto; background: #0284c7;">
+        <div style="font-weight: 700; color: #ffffff; margin-bottom: 4px; letter-spacing: 0.5px;">SIGN IN TO STREAM CLOUD GAMES</div>
+        <div style="font-size: 12px; color: #888888; margin-bottom: 14px;">Connect your Supabase account to access private game streaming without downloading ISOs.</div>
+        <button class="btn-primary" id="btn-open-auth-from-library" style="margin: 0 auto; background: #ffffff; color: #000000; font-weight: 600;">
           Connect Supabase Account
         </button>
       </div>
@@ -412,7 +412,7 @@ export class GameLibrary {
 
     if (this.cloudGames.length === 0) {
       container.innerHTML = `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 24px 16px; color: var(--text-dim); font-size: 13px;">
+        <div style="grid-column: 1 / -1; text-align: center; padding: 24px 16px; color: #666666; font-size: 13px;">
           No cloud games uploaded yet. Upload an ISO above to start streaming!
         </div>
       `;
@@ -425,13 +425,13 @@ export class GameLibrary {
       const sizeStr = this.formatBytes(game.size_bytes);
 
       card.innerHTML = `
-        <div class="game-icon" style="color: #38bdf8;">☁</div>
+        <div class="game-icon" style="color: #ffffff;">☁</div>
         <div class="game-info">
           <div class="game-name" title="${game.title}">${game.title}</div>
           <div class="game-meta">
-            <span class="game-badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8;">${game.format}</span>
+            <span class="game-badge" style="background: #222222; border: 1px solid #444444; color: #ffffff;">${game.format}</span>
             <span>${sizeStr}</span>
-            <span style="color: #38bdf8; font-weight: 600;">Stream On-Demand</span>
+            <span style="color: #ffffff; font-weight: 600;">Stream On-Demand</span>
           </div>
         </div>
         <button class="btn-icon delete-game-btn" title="Delete from cloud" style="position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; font-size: 11px;">✕</button>

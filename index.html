@@ -3,28 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>ZYQORA PSP | Browser-Based PlayStation Portable Emulator</title>
-  <meta name="description" content="High-performance browser-based PlayStation Portable (PSP) emulator running natively in WebAssembly (WASM), WebGL 2.0, and Web Audio. Play PSP homebrew and legal backups with zero install." />
+  <title>ZYQORA | Minimal Monochrome PSP Cloud Streaming</title>
+  <meta name="description" content="High-performance browser-based PlayStation Portable (PSP) emulator running in WebAssembly (WASM), WebGL 2.0, and Supabase cloud streaming." />
   
-  <meta name="theme-color" content="#00f0ff" />
+  <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 
   <link rel="stylesheet" href="/src/styles/index.css" />
 </head>
 <body>
   <div id="app">
-    <!-- Top Navigation Header -->
+    <!-- Top Navigation Header (Minimal Monochrome) -->
     <header class="app-header">
       <div class="brand-section">
         <a href="#" class="brand-logo" id="brand-home">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3" fill="rgba(0, 240, 255, 0.2)" stroke="#00f0ff"></polygon>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3" fill="rgba(255, 255, 255, 0.1)"></polygon>
           </svg>
           <span class="brand-text">ZYQORA</span>
-          <span class="brand-badge">PSP WASM</span>
+          <span class="brand-badge">PSP</span>
         </a>
-        <div class="status-pill">
+        <div class="status-pill" id="status-pill">
           <span class="status-dot" id="status-dot"></span>
           <span id="status-text">Ready</span>
         </div>
@@ -32,7 +32,7 @@
 
       <div class="header-controls">
         <button class="btn-primary" id="btn-open-library" title="Open Game Library">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
             <line x1="12" y1="17" x2="12" y2="21"></line>
@@ -40,7 +40,7 @@
           <span>Library</span>
         </button>
 
-        <label class="btn-icon" title="Load ROM from Disk (ISO, CSO, PBP, PRX)">
+        <label class="btn-icon" title="Load ROM from Disk (ISO, CSO, PBP)">
           <input type="file" id="file-input" accept=".iso,.cso,.chd,.pbp,.elf,.prx" style="display: none;" />
           <svg viewBox="0 0 24 24">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -49,18 +49,26 @@
           </svg>
         </label>
 
-        <button class="btn-icon" id="btn-save-state" title="Save State (F3)">
+        <button class="btn-primary btn-cloud" id="btn-cloud-sync" title="Supabase Cloud Streaming & Auth">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+          </svg>
+          <span id="cloud-sync-label">Cloud</span>
+        </button>
+
+        <!-- Screen Size Adjuster (Fit / Fill / Stretch / Native) -->
+        <button class="btn-icon" id="btn-screen-size" title="Screen Size (Fit / Fill / Stretch)">
           <svg viewBox="0 0 24 24">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
           </svg>
         </button>
 
-        <button class="btn-icon" id="btn-load-state" title="Load State (F4)">
+        <!-- Toggle Performance Stats -->
+        <button class="btn-icon" id="btn-toggle-stats" title="Toggle Stats Overlay">
           <svg viewBox="0 0 24 24">
-            <polyline points="1 4 1 10 7 10"></polyline>
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
           </svg>
         </button>
 
@@ -69,13 +77,6 @@
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
             <line x1="12" y1="18" x2="12.01" y2="18"></line>
           </svg>
-        </button>
-
-        <button class="btn-primary" id="btn-cloud-sync" style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; padding: 6px 12px; gap: 6px;" title="Supabase Cloud Streaming & Auth">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-          </svg>
-          <span id="cloud-sync-label">Cloud</span>
         </button>
 
         <button class="btn-icon" id="btn-open-settings" title="Emulator Settings">
@@ -87,7 +88,10 @@
 
         <button class="btn-icon" id="btn-fullscreen" title="Fullscreen (Alt+Enter)">
           <svg viewBox="0 0 24 24">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
           </svg>
         </button>
       </div>
@@ -95,7 +99,7 @@
 
     <!-- Main Viewport Stage -->
     <main class="main-stage">
-      <div class="psp-frame" id="psp-frame">
+      <div class="psp-frame screen-fit" id="psp-frame">
         <canvas id="canvas" tabindex="0" width="960" height="544" oncontextmenu="event.preventDefault()"></canvas>
 
         <!-- Welcome Overlay (Shown when no game is active) -->
@@ -119,9 +123,52 @@
             <button class="btn-primary" id="btn-quick-triangle" style="background: rgba(255, 255, 255, 0.08); border-color: var(--border-subtle);">
               <span>Run GPU 3D Demo</span>
             </button>
-            <button class="btn-primary" id="btn-quick-browse" style="background: rgba(255, 255, 255, 0.08); border-color: var(--border-subtle);">
+            <button class="btn-primary" id="btn-quick-browse">
               <span>Load ISO / PBP File</span>
             </button>
+          </div>
+        </div>
+
+        <!-- High-Tech Monochrome Gaming Boot Sequence Loader -->
+        <div class="gaming-loader" id="gaming-loader">
+          <div class="loader-scanlines"></div>
+          <div class="loader-card">
+            <div class="loader-reticle">
+              <div class="reticle-outer-ring"></div>
+              <div class="reticle-inner-ring"></div>
+              <div class="reticle-core">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </div>
+            </div>
+
+            <div class="loader-header-tag">ZYQORA // VIRTUAL ENGINE</div>
+            <h2 class="loader-game-title" id="gaming-loader-title">INITIALIZING ROM...</h2>
+
+            <div class="loader-status-container">
+              <div class="loader-badge">
+                <span class="status-pulse-dot"></span>
+                <span class="loader-step-label" id="gaming-loader-step">INITIALIZING CLOUD STREAM</span>
+              </div>
+              <p class="loader-subtext" id="gaming-loader-sub">Negotiating byte ranges with Supabase storage...</p>
+            </div>
+
+            <!-- Monochrome Cyber Progress Track -->
+            <div class="loader-progress-track">
+              <div class="loader-progress-bar" id="gaming-loader-bar" style="width: 10%;"></div>
+            </div>
+
+            <div class="loader-stats-strip">
+              <span id="gaming-loader-bytes">0.0 MB / 0 MB SYNCED</span>
+              <span id="gaming-loader-speed">ALLEGREX 333MHz</span>
+            </div>
+
+            <div class="loader-ticker">
+              <div class="loader-ticker-content" id="gaming-loader-ticker">
+                [CONNECT] ── [DOWNLOADING PACKETS] ── [PARSING ISO] ── [COMPILING SHADERS] ── [STARTING ENGINE] ── [BOOT GAME]
+              </div>
+            </div>
           </div>
         </div>
 
@@ -161,15 +208,39 @@
             <span class="hud-val fps-good" id="hud-stream-state">Idle</span>
           </div>
         </div>
+      </div>
 
-        <!-- Virtual Touch Controls Overlay -->
-        <div class="touch-controls-layer" id="touch-layer">
-          <!-- Shoulder Triggers -->
-          <div class="touch-cluster-top">
-            <button class="trigger-btn" id="btn-l">L-TRIGGER</button>
-            <button class="trigger-btn" id="btn-r">R-TRIGGER</button>
+      <!-- Dedicated Handheld Controller Deck (Below the screen in black area) -->
+      <div class="touch-controls-layer" id="touch-layer">
+        <!-- Mobile Controls & Keymap Text Bar (Positioned directly below the screen) -->
+        <div class="mobile-subdeck-bar" id="mobile-subdeck-bar">
+          <div class="mobile-subdeck-actions">
+            <button class="btn-icon" id="btn-mobile-pause" title="Pause / Menu (Esc)">
+              <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <button class="btn-icon" id="btn-mobile-fastforward" title="Toggle Turbo (F7)">
+              <svg viewBox="0 0 24 24"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
+            </button>
+            <button class="btn-icon" id="btn-mobile-screen" title="Screen Mode (Fit / Fill / Stretch)">
+              <svg viewBox="0 0 24 24"><path d="M15 3h6v6m-6 0 6-6M9 21H3v-6m6 0-6 6"></path></svg>
+            </button>
+            <button class="btn-icon" id="btn-mobile-stats" title="Toggle Performance Overlay">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </button>
           </div>
+          <div class="mobile-subdeck-text">
+            <span>✕: Z | ○: X | ▢: A | △: S | START: Space | SELECT: V</span>
+          </div>
+        </div>
 
+        <!-- Shoulder Triggers -->
+        <div class="touch-cluster-top">
+          <button class="trigger-btn" id="btn-l">L-TRIGGER</button>
+          <button class="trigger-btn" id="btn-r">R-TRIGGER</button>
+        </div>
+
+        <!-- Main Lower Deck with D-Pad, Analog Stick, Select/Start, and Actions -->
+        <div class="touch-deck-body">
           <!-- Left Controls: D-Pad & Analog Nub -->
           <div class="touch-cluster-left">
             <div class="dpad">
@@ -185,7 +256,13 @@
             </div>
           </div>
 
-          <!-- Right Controls: Action Buttons -->
+          <!-- Center System Buttons: Select & Start -->
+          <div class="touch-cluster-bottom">
+            <button class="sys-pill-btn" id="btn-select">SELECT</button>
+            <button class="sys-pill-btn" id="btn-start">START</button>
+          </div>
+
+          <!-- Right Controls: Action Buttons (△, ○, ✕, ▢) -->
           <div class="touch-cluster-right">
             <div class="action-cluster">
               <button class="action-btn btn-triangle" id="btn-triangle">△</button>
@@ -194,17 +271,11 @@
               <button class="action-btn btn-square" id="btn-square">▢</button>
             </div>
           </div>
-
-          <!-- Bottom Controls: Select & Start -->
-          <div class="touch-cluster-bottom">
-            <button class="sys-pill-btn" id="btn-select">SELECT</button>
-            <button class="sys-pill-btn" id="btn-start">START</button>
-          </div>
         </div>
       </div>
     </main>
 
-    <!-- Bottom Control Dock -->
+    <!-- Bottom Control Dock (Minimal Monochrome) -->
     <footer class="bottom-dock">
       <div class="dock-left">
         <button class="btn-icon" id="btn-dock-pause" title="Pause / Menu (Esc)">
@@ -213,10 +284,22 @@
             <rect x="14" y="4" width="4" height="16"></rect>
           </svg>
         </button>
-        <button class="btn-icon" id="btn-dock-fastforward" title="Toggle Unthrottle / Turbo (F7)">
+        <button class="btn-icon" id="btn-dock-fastforward" title="Toggle Turbo (F7)">
           <svg viewBox="0 0 24 24">
             <polygon points="13 19 22 12 13 5 13 19"></polygon>
             <polygon points="2 19 11 12 2 5 2 19"></polygon>
+          </svg>
+        </button>
+        <!-- Mobile Quick Screen Adjust -->
+        <button class="btn-icon" id="btn-dock-screen" title="Screen Mode (Fit / Fill / Stretch)">
+          <svg viewBox="0 0 24 24">
+            <path d="M15 3h6v6m-6 0 6-6M9 21H3v-6m6 0-6 6"></path>
+          </svg>
+        </button>
+        <!-- Mobile Quick Stats Toggle -->
+        <button class="btn-icon" id="btn-dock-stats" title="Toggle Stats Overlay">
+          <svg viewBox="0 0 24 24">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
         </button>
         <div class="gamepad-indicator" id="gamepad-status">
@@ -251,7 +334,7 @@
       <div class="modal-card">
         <div class="modal-header">
           <div class="modal-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
               <line x1="8" y1="21" x2="16" y2="21"></line>
               <line x1="12" y1="17" x2="12" y2="21"></line>
@@ -294,30 +377,30 @@
           <!-- Tab 2: Cloud Games Pane (Supabase) -->
           <div id="pane-cloud-games" style="display: none;">
             <!-- Cloud Upload Box -->
-            <div class="dropzone-box" id="cloud-dropzone" style="border-color: rgba(14, 165, 233, 0.4); background: rgba(14, 165, 233, 0.05);">
+            <div class="dropzone-box" id="cloud-dropzone">
               <input type="file" id="cloud-file-input" accept=".iso,.cso,.chd,.pbp,.elf,.prx" style="display: none;" />
-              <svg class="dropzone-icon" viewBox="0 0 24 24" style="stroke: #38bdf8;">
+              <svg class="dropzone-icon" viewBox="0 0 24 24">
                 <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
                 <polyline points="16 16 12 12 8 16"></polyline>
                 <line x1="12" y1="12" x2="12" y2="21"></line>
               </svg>
               <div style="font-weight: 600; color: #fff;">Upload Game to Private Supabase Storage</div>
               <div style="font-size: 12px; color: var(--text-muted);">
-                Files are stored securely in your private <code style="color: #38bdf8;">user-games</code> bucket and streamed on-demand
+                Files are stored in your private <code>user-games</code> bucket and streamed on-demand
               </div>
-              <button class="btn-primary" id="btn-browse-cloud-upload" style="margin-top: 10px; background: #0284c7;">
+              <button class="btn-primary" id="btn-browse-cloud-upload" style="margin-top: 10px;">
                 Select ISO to Upload
               </button>
             </div>
 
             <!-- Upload Progress Bar (hidden by default) -->
-            <div id="cloud-upload-progress" style="display: none; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+            <div id="cloud-upload-progress" style="display: none; background: #111; border: 1px solid #333; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
               <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
-                <span id="upload-status-text" style="color: #38bdf8; font-weight: 600;">Uploading game...</span>
+                <span id="upload-status-text" style="color: #fff; font-weight: 600;">Uploading game...</span>
                 <span id="upload-percent-text" style="color: #fff; font-family: var(--font-mono);">0%</span>
               </div>
-              <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden;">
-                <div id="upload-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8); transition: width 0.2s;"></div>
+              <div style="width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden;">
+                <div id="upload-progress-bar" style="width: 0%; height: 100%; background: #fff; transition: width 0.2s;"></div>
               </div>
               <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
                 <button class="btn-icon" id="btn-cancel-upload" style="font-size: 11px; padding: 4px 8px; width: auto; height: auto;">Cancel</button>
@@ -477,65 +560,65 @@
       <div class="modal-card" style="max-width: 480px;">
         <div class="modal-header">
           <div class="modal-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
               <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
             </svg>
-            <span>Supabase Cloud Sync</span>
+            <span>SUPABASE CLOUD SYNC</span>
           </div>
           <button class="btn-icon close-modal-btn">✕</button>
         </div>
         <div class="modal-body">
           <!-- State 1: Active User Session -->
-          <div id="auth-session-active" style="display: none; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: 700; letter-spacing: 0.5px;">Connected Account</div>
-            <div id="auth-user-email" style="font-size: 14px; font-weight: 600; color: #fff; margin-top: 4px;">user@example.com</div>
-            <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Private Storage Bucket: <code style="color: #38bdf8;">user-games</code> (RLS Active)</div>
+          <div id="auth-session-active" style="display: none; background: #111111; border: 1px solid #333333; border-radius: 6px; padding: 14px; margin-bottom: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #ffffff; font-weight: 700; letter-spacing: 0.5px;">Connected Account</div>
+            <div id="auth-user-email" style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">user@example.com</div>
+            <div style="font-size: 11px; color: #888888; margin-top: 2px;">Private Storage Bucket: <code style="color: #ffffff; background: #222; padding: 2px 5px; border-radius: 3px;">user-games</code> (RLS Active)</div>
             <div style="display: flex; gap: 8px; margin-top: 12px;">
-              <button class="btn-primary" id="btn-auth-signout" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; padding: 6px 14px;">Sign Out</button>
+              <button class="btn-primary" id="btn-auth-signout" style="background: transparent; border: 1px solid #555555; color: #ffffff; font-size: 11px; padding: 6px 14px;">Sign Out</button>
             </div>
           </div>
 
           <!-- State 2: Login / Signup Form -->
           <div id="auth-form-container">
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5;">
+            <div style="font-size: 13px; color: #aaaaaa; margin-bottom: 14px; line-height: 1.5;">
               Sign in to stream your personal PSP games on-demand using private Supabase Storage and HTTP byte-range requests.
             </div>
 
             <div style="margin-bottom: 12px;">
-              <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px;">Email</label>
-              <input type="email" id="auth-input-email" placeholder="gamer@example.com" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 13px;" />
+              <label style="display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #888888; margin-bottom: 5px;">Email</label>
+              <input type="email" id="auth-input-email" placeholder="gamer@example.com" style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 8px 12px; color: #ffffff; font-size: 13px;" />
             </div>
 
             <div style="margin-bottom: 16px;">
-              <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px;">Password</label>
-              <input type="password" id="auth-input-password" placeholder="••••••••" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 13px;" />
+              <label style="display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #888888; margin-bottom: 5px;">Password</label>
+              <input type="password" id="auth-input-password" placeholder="••••••••" style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 8px 12px; color: #ffffff; font-size: 13px;" />
             </div>
 
             <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-              <button class="btn-primary" id="btn-auth-signin" style="flex: 1; justify-content: center;">Sign In</button>
-              <button class="btn-primary" id="btn-auth-signup" style="flex: 1; justify-content: center; background: rgba(255, 255, 255, 0.08); border-color: var(--border-subtle);">Sign Up</button>
+              <button class="btn-primary" id="btn-auth-signin" style="flex: 1; justify-content: center; background: #ffffff; color: #000000; font-weight: 600;">Sign In</button>
+              <button class="btn-primary" id="btn-auth-signup" style="flex: 1; justify-content: center; background: transparent; border: 1px solid #444444; color: #ffffff;">Sign Up</button>
             </div>
 
-            <div style="text-align: center; margin: 12px 0; font-size: 11px; color: var(--text-dim);">OR</div>
+            <div style="text-align: center; margin: 12px 0; font-size: 11px; color: #666666; letter-spacing: 1px;">OR</div>
 
-            <button class="btn-primary" id="btn-auth-guest" style="width: 100%; justify-content: center; background: rgba(14, 165, 233, 0.1); border-color: rgba(14, 165, 233, 0.3); color: #38bdf8;">
+            <button class="btn-primary" id="btn-auth-guest" style="width: 100%; justify-content: center; background: #161616; border: 1px solid #333333; color: #ffffff;">
               Guest Session (Anonymous Auth)
             </button>
           </div>
 
           <!-- Supabase Credentials (Custom URL / Anon Key toggle) -->
-          <details style="margin-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px;">
-            <summary style="font-size: 11.5px; color: var(--text-muted); cursor: pointer; user-select: none;">Custom Supabase Project Credentials</summary>
+          <details style="margin-top: 18px; border-top: 1px solid #222222; padding-top: 12px;">
+            <summary style="font-size: 11.5px; color: #888888; cursor: pointer; user-select: none;">Custom Supabase Project Credentials</summary>
             <div style="margin-top: 10px;">
               <div style="margin-bottom: 8px;">
-                <label style="display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px;">Project URL</label>
-                <input type="text" id="cfg-supabase-url" placeholder="https://xyz.supabase.co" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px 10px; color: #fff; font-size: 11px; font-family: var(--font-mono);" />
+                <label style="display: block; font-size: 11px; color: #888888; margin-bottom: 2px;">Project URL</label>
+                <input type="text" id="cfg-supabase-url" placeholder="https://xyz.supabase.co" style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 6px 10px; color: #ffffff; font-size: 11px; font-family: var(--font-mono);" />
               </div>
               <div style="margin-bottom: 8px;">
-                <label style="display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px;">Anon / Publishable Key</label>
-                <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOi..." style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px 10px; color: #fff; font-size: 11px; font-family: var(--font-mono);" />
+                <label style="display: block; font-size: 11px; color: #888888; margin-bottom: 2px;">Anon / Publishable Key</label>
+                <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOi..." style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 6px 10px; color: #ffffff; font-size: 11px; font-family: var(--font-mono);" />
               </div>
-              <button class="btn-icon" id="btn-save-supabase-cfg" style="width: auto; padding: 4px 12px; font-size: 11px;">Save Credentials</button>
+              <button class="btn-icon" id="btn-save-supabase-cfg" style="width: auto; padding: 4px 12px; font-size: 11px; border: 1px solid #444444;">Save Credentials</button>
             </div>
           </details>
         </div>
@@ -544,73 +627,73 @@
 
     <!-- Dedicated Cloud Upload Progress Modal -->
     <div class="modal-backdrop" id="cloud-upload-modal">
-      <div class="modal-card" style="max-width: 500px; text-align: center; padding: 24px 24px; border: 1px solid rgba(14, 165, 233, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);">
+      <div class="modal-card" style="max-width: 480px; text-align: center; padding: 24px; border: 1px solid #333333; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);">
         <div style="display: flex; justify-content: flex-end; margin-top: -8px; margin-bottom: 4px;">
           <button class="btn-icon close-modal-btn" id="btn-close-upload-modal" style="width: 24px; height: 24px; font-size: 12px;">✕</button>
         </div>
-        <div style="width: 56px; height: 56px; margin: 0 auto 12px auto; border-radius: 50%; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); display: flex; align-items: center; justify-content: center;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+        <div style="width: 52px; height: 52px; margin: 0 auto 12px auto; border-radius: 50%; background: #161616; border: 1px solid #333333; display: flex; align-items: center; justify-content: center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
             <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
             <polyline points="16 16 12 12 8 16"></polyline>
             <line x1="12" y1="12" x2="12" y2="21"></line>
           </svg>
         </div>
 
-        <h3 id="upload-modal-title" style="margin: 0 0 6px 0; font-size: 18px; color: #fff;">Uploading Game to Supabase</h3>
-        <div id="upload-modal-filename" style="font-size: 13px; color: #38bdf8; font-weight: 600; margin-bottom: 2px;">game.iso</div>
-        <div id="upload-modal-sub" style="font-size: 11px; color: var(--text-dim); margin-bottom: 16px;">
+        <h3 id="upload-modal-title" style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: #ffffff;">UPLOADING GAME TO SUPABASE</h3>
+        <div id="upload-modal-filename" style="font-size: 12px; color: #ffffff; font-family: var(--font-mono); margin-bottom: 2px;">game.iso</div>
+        <div id="upload-modal-sub" style="font-size: 11px; color: #888888; margin-bottom: 16px;">
           Bypassing 50 MB Free Plan limit using automatic 40 MB chunking
         </div>
 
         <!-- Inline Authentication Box (shown if not signed in) -->
-        <div id="upload-modal-auth-box" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(14, 165, 233, 0.35); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
-          <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+        <div id="upload-modal-auth-box" style="display: none; background: #0a0a0a; border: 1px solid #333333; border-radius: 6px; padding: 16px; margin-bottom: 16px; text-align: left;">
+          <div style="font-size: 12px; font-weight: 700; color: #ffffff; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; letter-spacing: 0.5px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
-            <span>Supabase Sign-In Required</span>
+            <span>SUPABASE SIGN-IN REQUIRED</span>
           </div>
-          <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
-            Sign in to upload <span id="modal-auth-target-game" style="color: #38bdf8; font-weight: 600;"></span> to your private Supabase storage:
+          <div style="font-size: 11.5px; color: #888888; margin-bottom: 12px; line-height: 1.4;">
+            Sign in to upload <span id="modal-auth-target-game" style="color: #ffffff; font-weight: 600;"></span> to your private Supabase storage:
           </div>
           <div style="margin-bottom: 8px;">
-            <input type="email" id="modal-auth-email" placeholder="Email (e.g. player@example.com)" style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 12.5px;" />
+            <input type="email" id="modal-auth-email" placeholder="Email (e.g. player@example.com)" style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 8px 12px; color: #ffffff; font-size: 12px;" />
           </div>
           <div style="margin-bottom: 12px;">
-            <input type="password" id="modal-auth-pass" placeholder="Password" style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 12.5px;" />
+            <input type="password" id="modal-auth-pass" placeholder="Password" style="width: 100%; background: #000000; border: 1px solid #333333; border-radius: 4px; padding: 8px 12px; color: #ffffff; font-size: 12px;" />
           </div>
           <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-            <button class="btn-primary" id="btn-modal-auth-signin" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px;">Sign In & Upload</button>
-            <button class="btn-primary" id="btn-modal-auth-signup" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px; background: rgba(255,255,255,0.08); border-color: var(--border-subtle);">Sign Up</button>
+            <button class="btn-primary" id="btn-modal-auth-signin" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px; background: #ffffff; color: #000000; font-weight: 600;">Sign In & Upload</button>
+            <button class="btn-primary" id="btn-modal-auth-signup" style="flex: 1; justify-content: center; font-size: 12px; padding: 8px; background: transparent; border: 1px solid #444444; color: #ffffff;">Sign Up</button>
           </div>
-          <div style="text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px;">
-            <button type="button" id="btn-modal-auth-offline" style="background: none; border: none; color: #38bdf8; font-size: 11.5px; cursor: pointer; text-decoration: underline;">
+          <div style="text-align: center; border-top: 1px solid #222222; padding-top: 8px;">
+            <button type="button" id="btn-modal-auth-offline" style="background: none; border: none; color: #888888; font-size: 11.5px; cursor: pointer; text-decoration: underline;">
               Play locally in browser (no cloud sync)
             </button>
           </div>
         </div>
 
         <!-- Upload Progress Section -->
-        <div id="upload-modal-progress-section" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left;">
-          <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 8px;">
-            <span id="upload-modal-part-text" style="color: #38bdf8; font-weight: 600;">Part 1 of 1</span>
-            <span id="upload-modal-pct-text" style="color: #fff; font-family: var(--font-mono); font-weight: 700;">0%</span>
+        <div id="upload-modal-progress-section" style="background: #0a0a0a; border: 1px solid #222222; border-radius: 6px; padding: 16px; margin-bottom: 16px; text-align: left;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px;">
+            <span id="upload-modal-part-text" style="color: #ffffff; font-weight: 600; font-family: var(--font-mono);">Part 1 of 1</span>
+            <span id="upload-modal-pct-text" style="color: #ffffff; font-family: var(--font-mono); font-weight: 700;">0%</span>
           </div>
-          <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
-            <div id="upload-modal-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8, #00f0ff); transition: width 0.2s; box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);"></div>
+          <div style="width: 100%; height: 6px; background: #222222; border-radius: 3px; overflow: hidden; margin-bottom: 10px;">
+            <div id="upload-modal-progress-bar" style="width: 0%; height: 100%; background: #ffffff; transition: width 0.2s;"></div>
           </div>
-          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888888; font-family: var(--font-mono);">
             <span id="upload-modal-bytes-text">0 MB / 0 MB</span>
-            <span id="upload-modal-state-text" style="color: #94a3b8;">Uploading to private bucket...</span>
+            <span id="upload-modal-state-text" style="color: #888888;">Uploading to private bucket...</span>
           </div>
         </div>
 
-        <div style="font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 16px;">
-          🔒 Files are encrypted and stored in your private <code style="color: #38bdf8;">user-games</code> Supabase storage bucket. Gameplay starts automatically when finished.
+        <div style="font-size: 11px; color: #666666; line-height: 1.5; margin-bottom: 16px;">
+          Files are encrypted and stored in your private <code style="color: #ffffff; background: #222; padding: 2px 5px; border-radius: 3px;">user-games</code> Supabase storage bucket. Gameplay starts automatically when finished.
         </div>
 
-        <button class="btn-primary" id="btn-cancel-upload-modal" style="margin: 0 auto; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-size: 12px; padding: 6px 18px;">
+        <button class="btn-primary" id="btn-cancel-upload-modal" style="margin: 0 auto; background: transparent; border: 1px solid #555555; color: #ffffff; font-size: 11px; padding: 6px 18px;">
           Cancel Upload
         </button>
       </div>
