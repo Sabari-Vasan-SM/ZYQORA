@@ -37,20 +37,20 @@ export class SupabaseService {
     return SupabaseService.instance;
   }
 
-  /**
-   * Initialize Supabase client from env or localStorage config
-   */
   public initClient(): boolean {
-    const url = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('zyqora_supabase_url');
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('zyqora_supabase_anon_key');
+    let rawUrl = (import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('zyqora_supabase_url') || '').trim();
+    const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('zyqora_supabase_anon_key') || '').trim();
 
-    if (!url || !anonKey) {
+    if (!rawUrl || !rawKey) {
       this.client = null;
       return false;
     }
 
+    // Automatically strip any trailing /rest/v1/ or trailing slash
+    const cleanUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+
     try {
-      this.client = createClient(url, anonKey, {
+      this.client = createClient(cleanUrl, rawKey, {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
