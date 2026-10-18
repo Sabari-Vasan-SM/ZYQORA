@@ -18,6 +18,7 @@ export interface RemoteGameFileOptions {
   getPartUrl?: (partIndex: number) => Promise<string>; // Signed URL resolver per part
   onUrlRefresh?: () => Promise<string>; // Auth token refresh callback
   onMetrics?: (metrics: StreamingMetrics) => void;
+  onChunkLoaded?: (chunkIndex: number, chunk: Uint8Array) => void;
 }
 
 export interface StreamingMetrics {
@@ -77,6 +78,7 @@ export class RemoteGameFile {
       getPartUrl: options.getPartUrl || (async (part) => this.url),
       onUrlRefresh: options.onUrlRefresh || (async () => this.url),
       onMetrics: options.onMetrics || (() => {}),
+      onChunkLoaded: options.onChunkLoaded || (() => {}),
     };
 
     if (this.options.isChunked && this.options.totalFileSize > 0) {
@@ -419,6 +421,15 @@ export class RemoteGameFile {
 
     this.chunkCache.set(chunkIndex, chunk);
     this.currentCacheBytes += chunk.byteLength;
+    this.options.onChunkLoaded(chunkIndex, chunk);
+  }
+
+  getChunk(chunkIndex: number): Uint8Array | undefined {
+    return this.chunkCache.get(chunkIndex);
+  }
+
+  setChunkCallback(cb: (chunkIndex: number, chunk: Uint8Array) => void): void {
+    this.options.onChunkLoaded = cb;
   }
 
   cancel(): void {

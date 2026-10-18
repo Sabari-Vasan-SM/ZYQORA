@@ -137,6 +137,66 @@ export class ISOParser {
           }
         }
       }
+
+      // 4. Read USRDIR to prefetch game index tables, disc info, and movie decoder PRXs
+      const usrDir = pspGameEntries.find((e) => e.name.toUpperCase() === 'USRDIR');
+      if (usrDir) {
+        metadata.bootByteRanges.push({
+          start: usrDir.lbn * 2048,
+          end: Math.min(totalSize - 1, usrDir.lbn * 2048 + Math.max(usrDir.length, 4096) - 1),
+        });
+
+        try {
+          const usrBytes = await this.file.read(usrDir.lbn * 2048, Math.min(usrDir.length, 32768));
+          const usrEntries = this.parseDirectoryEntries(usrBytes);
+
+          for (const entry of usrEntries) {
+            const ext = entry.name.toUpperCase().split('.').pop() || '';
+
+            if (entry.isDir) {
+              // Recurse into subdirectories (e.g. USRDIR/modules, USRDIR/movie)
+              metadata.bootByteRanges.push({
+                start: entry.lbn * 2048,
+                end: Math.min(totalSize - 1, entry.lbn * 2048 + Math.max(entry.length, 4096) - 1),
+              });
+
+              try {
+                const subBytes = await this.file.read(entry.lbn * 2048, Math.min(entry.length, 32768));
+                const subEntries = this.parseDirectoryEntries(subBytes);
+                for (const sub of subEntries) {
+                  const subExt = sub.name.toUpperCase().split('.').pop() || '';
+                  if (['PRX', 'BIN', 'IDX', 'SFO'].includes(subExt) && sub.length < 5 * 1024 * 1024) {
+                    metadata.bootByteRanges.push({
+                      start: sub.lbn * 2048,
+                      end: Math.min(totalSize - 1, sub.lbn * 2048 + sub.length - 1),
+                    });
+                  } else if (subExt === 'PMF') {
+                    // Prefetch small looping title PMF or initial 2 MB of opening movie
+                    const prefetchLen = sub.length < 2 * 1024 * 1024 ? sub.length : 2 * 1024 * 1024;
+                    if (sub.name.toUpperCase().includes('TITLE') || sub.name.toUpperCase().includes('OPEN')) {
+                      metadata.bootByteRanges.push({
+                        start: sub.lbn * 2048,
+                        end: Math.min(totalSize - 1, sub.lbn * 2048 + prefetchLen - 1),
+                      });
+                    }
+                  }
+                }
+              } catch (_) {}
+            } else if (['PRX', 'BIN', 'IDX', 'SFO'].includes(ext) && entry.length < 5 * 1024 * 1024) {
+              metadata.bootByteRanges.push({
+                start: entry.lbn * 2048,
+                end: Math.min(totalSize - 1, entry.lbn * 2048 + entry.length - 1),
+              });
+            } else if (ext === 'PMF' && (entry.name.toUpperCase().includes('TITLE') || entry.name.toUpperCase().includes('OPEN'))) {
+              const prefetchLen = entry.length < 2 * 1024 * 1024 ? entry.length : 2 * 1024 * 1024;
+              metadata.bootByteRanges.push({
+                start: entry.lbn * 2048,
+                end: Math.min(totalSize - 1, entry.lbn * 2048 + prefetchLen - 1),
+              });
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     return metadata;
@@ -146,8 +206,8 @@ export class ISOParser {
     return buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24);
   }
 
-  private parseDirectoryEntries(dirBytes: Uint8Array): Array<{ name: string; lbn: number; length: number }> {
-    const entries: Array<{ name: string; lbn: number; length: number }> = [];
+  private parseDirectoryEntries(dirBytes: Uint8Array): Array<{ name: string; lbn: number; length: number; isDir: boolean }> {
+    const entries: Array<{ name: string; lbn: number; length: number; isDir: boolean }> = [];
     let offset = 0;
 
     while (offset < dirBytes.length) {
@@ -160,12 +220,14 @@ export class ISOParser {
 
       const lbn = this.readUint32LE(dirBytes, offset + 2);
       const dataLen = this.readUint32LE(dirBytes, offset + 10);
+      const flags = dirBytes[offset + 25];
+      const isDir = (flags & 2) !== 0;
       const nameLen = dirBytes[offset + 32];
       const rawName = String.fromCharCode(...dirBytes.subarray(offset + 33, offset + 33 + nameLen));
       const cleanName = rawName.split(';')[0]; // Strip ISO 9660 version suffix ';1'
 
       if (cleanName && cleanName !== '\x00' && cleanName !== '\x01') {
-        entries.push({ name: cleanName, lbn, length: dataLen });
+        entries.push({ name: cleanName, lbn, length: dataLen, isDir });
       }
 
       offset += recordLen;

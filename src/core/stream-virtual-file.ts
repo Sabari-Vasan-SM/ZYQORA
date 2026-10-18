@@ -22,6 +22,9 @@ export class StreamVirtualFileAdapter {
 
   constructor(remoteFile: RemoteGameFile) {
     this.remoteFile = remoteFile;
+    this.remoteFile.setChunkCallback((chunkIndex, chunkData) => {
+      this.sparseChunks.set(chunkIndex, chunkData);
+    });
   }
 
   /**
@@ -108,6 +111,22 @@ export class StreamVirtualFileAdapter {
 
         return readLength;
       },
+      mmap: (stream: any, length: number, position: number, prot: number, flags: number) => {
+        const FS = (window as any).FS;
+        const mmapAlloc = (window as any).mmapAlloc;
+        const ptr = mmapAlloc ? mmapAlloc(length) : 0;
+        if (!ptr) {
+          if (originalStreamOps.mmap) {
+            return originalStreamOps.mmap(stream, length, position, prot, flags);
+          }
+          throw new FS.ErrnoError(48); // ENOMEM
+        }
+        const heap = ((window as any).growMemViews ? (window as any).growMemViews() : window).HEAPU8 || (window as any).HEAP8;
+        if (heap) {
+          self.readFromSparseCache(heap, ptr >>> 0, position, length);
+        }
+        return { ptr, allocated: true };
+      },
       llseek: (stream: any, offset: number, whence: number) => {
         let position = offset;
         if (whence === 1) { // SEEK_CUR
@@ -155,15 +174,15 @@ export class StreamVirtualFileAdapter {
     const endChunk = Math.floor((fileOffset + length - 1) / this.chunkSize);
 
     for (let c = startChunk; c <= endChunk; c++) {
-      const chunk = this.sparseChunks.get(c);
+      const chunk = this.sparseChunks.get(c) || this.remoteFile.getChunk(c);
       const chunkStart = c * this.chunkSize;
       const copyStart = Math.max(fileOffset, chunkStart);
-      const copyEnd = Math.min(fileOffset + length, chunkStart + this.chunkSize);
+      const copyEnd = Math.min(fileOffset + length, chunkStart + (chunk ? chunk.length : this.chunkSize));
 
-      const count = copyEnd - copyStart;
+      const count = Math.max(0, copyEnd - copyStart);
       const destIndex = destOffset + (copyStart - fileOffset);
 
-      if (chunk) {
+      if (chunk && copyStart - chunkStart < chunk.length) {
         const srcIndex = copyStart - chunkStart;
         dest.set(chunk.subarray(srcIndex, srcIndex + count), destIndex);
         bytesCopied += count;

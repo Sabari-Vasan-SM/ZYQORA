@@ -29,8 +29,8 @@ SoftwareRendering = False
 DisplayRefreshRate = 60
 FrameRate = 60
 FrameRate2 = -1
-FrameSkip = 1
-AutoFrameSkip = True
+FrameSkip = 0
+AutoFrameSkip = False
 VerticalSync = True
 LowLatencyPresent = True
 InternalResolution = 1
@@ -149,6 +149,7 @@ export class EmulatorManager {
           isChunked: gameData.isChunked || false,
           partSize: gameData.partSize || 40 * 1024 * 1024,
           totalFileSize: gameData.sizeBytes || 0,
+          maxCacheSize: 128 * 1024 * 1024,
           getPartUrl: gameData.getPartUrl,
           onMetrics: (metrics) => {
             this.onStreamingMetrics(metrics, gameData.sizeBytes);
