@@ -54,7 +54,10 @@ export class ISOParser {
       totalSizeBytes: totalSize,
       rootDirectorySector: rootLbn,
       bootByteRanges: [
-        { start: 0, end: 65535 }, // Sectors 0-31: System area + PVD + VD terminators (64 KB)
+        // Sectors 0-31: System area + PVD + Volume Descriptor Set Terminators (64 KB)
+        { start: 0, end: Math.min(totalSize - 1, 65535) },
+        // Root directory record
+        { start: rootLbn * 2048, end: Math.min(totalSize - 1, rootLbn * 2048 + Math.max(rootLength, 4096) - 1) },
       ],
     };
 
@@ -64,6 +67,11 @@ export class ISOParser {
     const pspGameEntry = rootEntries.find((e) => e.name.toUpperCase() === 'PSP_GAME');
 
     if (pspGameEntry) {
+      metadata.bootByteRanges.push({
+        start: pspGameEntry.lbn * 2048,
+        end: Math.min(totalSize - 1, pspGameEntry.lbn * 2048 + Math.max(pspGameEntry.length, 4096) - 1),
+      });
+
       // 3. Read PSP_GAME directory to find PARAM.SFO and SYSDIR
       const pspGameBytes = await this.file.read(pspGameEntry.lbn * 2048, Math.min(pspGameEntry.length, 65536));
       const pspGameEntries = this.parseDirectoryEntries(pspGameBytes);
@@ -75,7 +83,7 @@ export class ISOParser {
         metadata.paramSfoSize = paramSfo.length;
         metadata.bootByteRanges.push({
           start: paramSfo.lbn * 2048,
-          end: paramSfo.lbn * 2048 + paramSfo.length - 1,
+          end: Math.min(totalSize - 1, paramSfo.lbn * 2048 + paramSfo.length - 1),
         });
 
         // Try reading PARAM.SFO to extract real Title and Game ID
@@ -90,21 +98,43 @@ export class ISOParser {
       // Find SYSDIR directory
       const sysDir = pspGameEntries.find((e) => e.name.toUpperCase() === 'SYSDIR');
       if (sysDir) {
+        metadata.bootByteRanges.push({
+          start: sysDir.lbn * 2048,
+          end: Math.min(totalSize - 1, sysDir.lbn * 2048 + Math.max(sysDir.length, 4096) - 1),
+        });
+
         const sysDirBytes = await this.file.read(sysDir.lbn * 2048, Math.min(sysDir.length, 32768));
         const sysEntries = this.parseDirectoryEntries(sysDirBytes);
 
-        // Find EBOOT.BIN or BOOT.BIN
-        const eboot = sysEntries.find(
-          (e) => e.name.toUpperCase() === 'BOOT.BIN' || e.name.toUpperCase() === 'EBOOT.BIN'
-        );
-
-        if (eboot) {
-          metadata.ebootSector = eboot.lbn;
-          metadata.ebootSizeBytes = eboot.length;
+        // Crucial: prioritize EBOOT.BIN (the primary executable)
+        const ebootEntry = sysEntries.find((e) => e.name.toUpperCase() === 'EBOOT.BIN');
+        if (ebootEntry) {
+          metadata.ebootSector = ebootEntry.lbn;
+          metadata.ebootSizeBytes = ebootEntry.length;
           metadata.bootByteRanges.push({
-            start: eboot.lbn * 2048,
-            end: eboot.lbn * 2048 + eboot.length - 1,
+            start: ebootEntry.lbn * 2048,
+            end: Math.min(totalSize - 1, ebootEntry.lbn * 2048 + ebootEntry.length - 1),
           });
+        }
+
+        // Also prefetch BOOT.BIN if present
+        const bootEntry = sysEntries.find((e) => e.name.toUpperCase() === 'BOOT.BIN');
+        if (bootEntry) {
+          metadata.bootByteRanges.push({
+            start: bootEntry.lbn * 2048,
+            end: Math.min(totalSize - 1, bootEntry.lbn * 2048 + bootEntry.length - 1),
+          });
+        }
+
+        // Prefetch any other PRX modules in SYSDIR
+        for (const entry of sysEntries) {
+          const name = entry.name.toUpperCase();
+          if (name.endsWith('.PRX') || name === 'OPNSSMP.BIN') {
+            metadata.bootByteRanges.push({
+              start: entry.lbn * 2048,
+              end: Math.min(totalSize - 1, entry.lbn * 2048 + entry.length - 1),
+            });
+          }
         }
       }
     }
