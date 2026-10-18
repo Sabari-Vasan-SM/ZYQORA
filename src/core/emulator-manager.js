@@ -146,6 +146,10 @@ export class EmulatorManager {
         this.onStatusChange('loading', `Connecting to cloud stream for ${gameData.name}...`);
         this.remoteGameFile = new RemoteGameFile(gameData.streamUrl, {
           gameVersionId: gameData.id,
+          isChunked: gameData.isChunked || false,
+          partSize: gameData.partSize || 40 * 1024 * 1024,
+          totalFileSize: gameData.sizeBytes || 0,
+          getPartUrl: gameData.getPartUrl,
           onMetrics: (metrics) => {
             this.onStreamingMetrics(metrics, gameData.sizeBytes);
           },

@@ -1,7 +1,8 @@
 /**
  * RemoteGameFile: TypeScript Random-Access Streaming Adapter
  * Provides on-demand byte-range streaming with bounded LRU chunk caching,
- * request deduplication, read coalescing, network retry backoff, and auth token refresh.
+ * request deduplication, read coalescing, network retry backoff, auth token refresh,
+ * and transparent multi-part (40 MB) chunking to stay 100% within Supabase Free Tier limits.
  */
 
 export interface RemoteGameFileOptions {
@@ -11,6 +12,10 @@ export interface RemoteGameFileOptions {
   retryAttempts?: number;          // Default 3
   retryDelayMs?: number;           // Default 500 ms
   gameVersionId?: string;          // Version/checksum tag to isolate cache
+  isChunked?: boolean;             // True if file is split into 40 MB parts
+  partSize?: number;               // Default 40 MiB (41943040 bytes)
+  totalFileSize?: number;          // Known total file size for chunked games
+  getPartUrl?: (partIndex: number) => Promise<string>; // Signed URL resolver per part
   onUrlRefresh?: () => Promise<string>; // Auth token refresh callback
   onMetrics?: (metrics: StreamingMetrics) => void;
 }
@@ -32,6 +37,9 @@ export class RemoteGameFile {
   private totalSize: number | null = null;
   private isOpen = false;
   private abortController: AbortController | null = null;
+
+  // Cached signed URLs for parts: partIndex -> { url: string, expiresAt: number }
+  private partUrlCache = new Map<number, { url: string; expiresAt: number }>();
 
   // LRU Chunk Cache: chunkIndex -> Uint8Array
   private chunkCache = new Map<number, Uint8Array>();
@@ -63,9 +71,17 @@ export class RemoteGameFile {
       retryAttempts: options.retryAttempts ?? 3,
       retryDelayMs: options.retryDelayMs || 500,
       gameVersionId: options.gameVersionId || 'default',
+      isChunked: options.isChunked || false,
+      partSize: options.partSize || 40 * 1024 * 1024, // 40 MiB
+      totalFileSize: options.totalFileSize || 0,
+      getPartUrl: options.getPartUrl || (async (part) => this.url),
       onUrlRefresh: options.onUrlRefresh || (async () => this.url),
       onMetrics: options.onMetrics || (() => {}),
     };
+
+    if (this.options.isChunked && this.options.totalFileSize > 0) {
+      this.totalSize = this.options.totalFileSize;
+    }
   }
 
   /**
@@ -78,11 +94,14 @@ export class RemoteGameFile {
 
     this.abortController = new AbortController();
 
-    // Fetch the initial 1 MiB chunk (Chunk 0) to discover total size and prime header cache
+    // Fetch the initial 1 MiB chunk (Chunk 0) to prime header cache and verify range support
     const initialEnd = this.options.chunkSize - 1;
     const probe = await this.fetchWithRetry(0, initialEnd, this.abortController.signal);
     this.isOpen = true;
-    this.totalSize = probe.totalSize;
+
+    if (this.totalSize === null || this.totalSize === 0) {
+      this.totalSize = probe.totalSize;
+    }
 
     // Cache the full initial chunk
     if (probe.chunkData && probe.chunkData.length > 0) {
@@ -160,7 +179,6 @@ export class RemoteGameFile {
 
     for (let c = startChunk; c <= endChunk; c++) {
       if (!this.chunkCache.has(c) && !this.inFlightRequests.has(c)) {
-        // Fire and forget
         this.getOrFetchChunk(c).catch(() => {});
       }
     }
@@ -173,7 +191,6 @@ export class RemoteGameFile {
     // 1. Cache hit
     const cached = this.chunkCache.get(chunkIndex);
     if (cached) {
-      // Re-insert to refresh LRU position
       this.chunkCache.delete(chunkIndex);
       this.chunkCache.set(chunkIndex, cached);
 
@@ -229,9 +246,84 @@ export class RemoteGameFile {
   }
 
   /**
+   * Resolve signed URL for a 40 MB part (with 50-minute local caching)
+   */
+  private async resolvePartUrl(partIndex: number): Promise<string> {
+    const cached = this.partUrlCache.get(partIndex);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.url;
+    }
+
+    const signedUrl = await this.options.getPartUrl(partIndex);
+    // Cache for 50 minutes (signed URLs are usually valid for 60 min)
+    this.partUrlCache.set(partIndex, {
+      url: signedUrl,
+      expiresAt: now + 50 * 60 * 1000,
+    });
+    return signedUrl;
+  }
+
+  /**
    * Execute fetch with exponential backoff and auth token expiration handling
+   * Handles multi-part files transparently across 40 MB part boundaries
    */
   private async fetchWithRetry(
+    start: number,
+    end: number,
+    signal?: AbortSignal
+  ): Promise<{ chunkData: Uint8Array; totalSize: number }> {
+    // If not a chunked file, use standard single-file fetch
+    if (!this.options.isChunked) {
+      return this.fetchSingleRange(this.url, start, end, signal);
+    }
+
+    // Chunked multi-part mode (40 MB parts)
+    const partSize = this.options.partSize;
+    const startPart = Math.floor(start / partSize);
+    const endPart = Math.floor(end / partSize);
+
+    // Common case: 1 MiB chunk falls completely within a single 40 MB part
+    if (startPart === endPart) {
+      const partUrl = await this.resolvePartUrl(startPart);
+      const subStart = start - startPart * partSize;
+      const subEnd = end - startPart * partSize;
+      const res = await this.fetchSingleRange(partUrl, subStart, subEnd, signal);
+      return {
+        chunkData: res.chunkData,
+        totalSize: this.totalSize || (startPart * partSize + res.totalSize),
+      };
+    }
+
+    // Edge case: chunk spans across two 40 MB parts
+    const boundary = (startPart + 1) * partSize;
+    const [part1Res, part2Res] = await Promise.all([
+      (async () => {
+        const url1 = await this.resolvePartUrl(startPart);
+        const s1 = start - startPart * partSize;
+        const e1 = partSize - 1;
+        return this.fetchSingleRange(url1, s1, e1, signal);
+      })(),
+      (async () => {
+        const url2 = await this.resolvePartUrl(endPart);
+        const s2 = 0;
+        const e2 = end - endPart * partSize;
+        return this.fetchSingleRange(url2, s2, e2, signal);
+      })(),
+    ]);
+
+    const combined = new Uint8Array(part1Res.chunkData.length + part2Res.chunkData.length);
+    combined.set(part1Res.chunkData, 0);
+    combined.set(part2Res.chunkData, part1Res.chunkData.length);
+
+    return {
+      chunkData: combined,
+      totalSize: this.totalSize || (endPart * partSize + part2Res.totalSize),
+    };
+  }
+
+  private async fetchSingleRange(
+    targetUrl: string,
     start: number,
     end: number,
     signal?: AbortSignal
@@ -244,7 +336,8 @@ export class RemoteGameFile {
       }
 
       try {
-        const resp = await fetch(this.url, {
+        let currentUrl = targetUrl;
+        const resp = await fetch(currentUrl, {
           method: 'GET',
           headers: {
             Range: `bytes=${start}-${end}`,
@@ -256,13 +349,12 @@ export class RemoteGameFile {
         if (resp.status === 401 || resp.status === 403) {
           console.warn(`[RemoteGameFile] Auth error (${resp.status}), attempting URL refresh...`);
           const refreshedUrl = await this.options.onUrlRefresh();
-          if (refreshedUrl && refreshedUrl !== this.url) {
-            this.url = refreshedUrl;
-            continue; // retry immediately with refreshed URL
+          if (refreshedUrl && refreshedUrl !== currentUrl) {
+            currentUrl = refreshedUrl;
+            continue;
           }
         }
 
-        // Server returned 200 OK instead of 206 Partial Content
         if (resp.status === 200) {
           throw new Error('Server returned full file (HTTP 200) instead of HTTP 206 Partial Content. Byte-range is not supported.');
         }
@@ -271,7 +363,6 @@ export class RemoteGameFile {
           throw new Error(`HTTP Range Request failed with status ${resp.status} ${resp.statusText}`);
         }
 
-        // Parse Content-Range header
         const contentRange = resp.headers.get('Content-Range');
         if (!contentRange) {
           throw new Error('Missing Content-Range header in HTTP 206 response');
@@ -296,7 +387,6 @@ export class RemoteGameFile {
         if (err.name === 'AbortError') throw err;
         lastError = err;
 
-        // Exponential backoff
         if (attempt < this.options.retryAttempts) {
           const delay = this.options.retryDelayMs * Math.pow(2, attempt);
           await new Promise((res) => setTimeout(res, delay));
@@ -316,7 +406,6 @@ export class RemoteGameFile {
       this.chunkCache.delete(chunkIndex);
     }
 
-    // Evict oldest entries until cache has room
     while (this.currentCacheBytes + chunk.byteLength > this.options.maxCacheSize && this.chunkCache.size > 0) {
       const oldestKey = this.chunkCache.keys().next().value;
       if (oldestKey !== undefined) {
@@ -334,9 +423,6 @@ export class RemoteGameFile {
     this.currentCacheBytes += chunk.byteLength;
   }
 
-  /**
-   * Cancel pending requests and release session memory
-   */
   cancel(): void {
     if (this.abortController) {
       this.abortController.abort();
@@ -345,20 +431,15 @@ export class RemoteGameFile {
     this.inFlightRequests.clear();
   }
 
-  /**
-   * Clean up all buffers and close session
-   */
   close(): void {
     this.cancel();
     this.chunkCache.clear();
+    this.partUrlCache.clear();
     this.currentCacheBytes = 0;
     this.isOpen = false;
     this.totalSize = null;
   }
 
-  /**
-   * Return current streaming metrics
-   */
   getMetrics(): StreamingMetrics {
     return { ...this.metrics };
   }

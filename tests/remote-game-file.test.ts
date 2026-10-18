@@ -168,8 +168,40 @@ async function runTests() {
       failed++;
     }
 
+    // Test 7: Multi-part chunked streaming (Supabase Free Plan 40 MB split emulation)
+    console.log('[Test 7] Testing multi-part chunked streaming across part boundaries...');
+    // Create a 2-part synthetic file: Part 0 (2 MB), Part 1 (3 MB) = 5 MB total
+    const partSize = 2 * 1024 * 1024; // 2 MB parts for test
+    const chunkedFile = new RemoteGameFile(`${baseUrl}/game.iso`, {
+      isChunked: true,
+      partSize: partSize,
+      totalFileSize: totalSizeBytes,
+      getPartUrl: async (partIdx) => `${baseUrl}/game.iso?part=${partIdx}`,
+    });
+
+    await chunkedFile.open();
+    // Read spanning across the 2 MB part boundary: offset 2097100, length 100
+    const spanOffset = partSize - 50;
+    const spanLen = 100;
+    const spanBytes = await chunkedFile.read(spanOffset, spanLen);
+    let spanOk = spanBytes.length === spanLen;
+    for (let i = 0; i < spanLen; i++) {
+      if (spanBytes[i] !== mockFile[spanOffset + i]) {
+        spanOk = false;
+        break;
+      }
+    }
+    if (spanOk) {
+      console.log('✓ PASS: Seamlessly read across multi-part chunk boundary without data corruption');
+      passed++;
+    } else {
+      console.error('✗ FAIL: Multi-part chunked boundary read mismatch');
+      failed++;
+    }
+
     file.close();
     fileWithRefresh.close();
+    chunkedFile.close();
 
   } finally {
     server.close();

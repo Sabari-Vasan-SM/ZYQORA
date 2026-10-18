@@ -196,9 +196,18 @@ export class GameLibrary {
 
     try {
       const title = file.name.replace(/\.[^/.]+$/, '');
-      const gameRecord = await supabase.uploadGame(file, title, (pct) => {
+      const gameRecord = await supabase.uploadGame(file, title, (pct, loaded, total, currentPart, totalParts) => {
         if (progressBar) progressBar.style.width = `${pct}%`;
-        if (percentText) percentText.textContent = `${Math.round(pct)}%`;
+        if (percentText) {
+          if (totalParts && totalParts > 1) {
+            percentText.textContent = `Part ${currentPart}/${totalParts} (${pct}%)`;
+          } else {
+            percentText.textContent = `${pct}%`;
+          }
+        }
+        if (statusText && totalParts && totalParts > 1) {
+          statusText.textContent = `Uploading part ${currentPart} of ${totalParts} (40 MB chunks for Supabase Free Tier)...`;
+        }
       });
 
       this.showToast(`Uploaded "${title}" to Supabase!`, 'success');
@@ -220,8 +229,12 @@ export class GameLibrary {
     const supabase = SupabaseService.getInstance();
     try {
       this.showToast(`Generating secure signed URL for ${game.title}...`, 'info');
-      // Create signed stream URL valid for 1 hour
-      const signedUrl = await supabase.getSignedStreamUrl(game.storage_path, 3600);
+      const isChunked = game.checksum?.startsWith('chunked:');
+
+      // Create initial signed stream URL valid for 1 hour
+      const signedUrl = isChunked
+        ? await supabase.getSignedStreamUrlForPart(game.storage_path, 0, 3600)
+        : await supabase.getSignedStreamUrl(game.storage_path, 3600);
 
       const streamGame = {
         id: game.id,
@@ -233,6 +246,11 @@ export class GameLibrary {
         storagePath: game.storage_path,
         isCloudStream: true,
         streamUrl: signedUrl,
+        isChunked: isChunked,
+        partSize: 40 * 1024 * 1024,
+        getPartUrl: isChunked
+          ? (partIndex) => supabase.getSignedStreamUrlForPart(game.storage_path, partIndex, 3600)
+          : undefined,
       };
 
       this.selectGame(streamGame);
@@ -243,13 +261,13 @@ export class GameLibrary {
     }
   }
 
-  async deleteCloudGame(gameId, storagePath, e) {
+  async deleteCloudGame(gameId, storagePath, checksum, e) {
     if (e) e.stopPropagation();
     if (!confirm('Are you sure you want to delete this game from your private cloud storage?')) return;
 
     const supabase = SupabaseService.getInstance();
     try {
-      await supabase.deleteGame(gameId, storagePath);
+      await supabase.deleteGame(gameId, storagePath, checksum);
       this.cloudGames = this.cloudGames.filter((g) => g.id !== gameId);
       this.renderCloudGames();
       this.showToast('Game deleted from cloud storage', 'warn');

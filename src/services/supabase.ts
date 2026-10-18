@@ -188,15 +188,19 @@ export class SupabaseService {
   public async uploadGame(
     file: File,
     title: string,
-    onProgress?: (percent: number, loaded: number, total: number) => void
+    onProgress?: (percent: number, loaded: number, total: number, currentPart?: number, totalParts?: number) => void
   ): Promise<GameMetadata> {
     if (!this.client || !this.currentUser) throw new Error('Must be signed in to upload games.');
 
     const ext = file.name.split('.').pop()?.toUpperCase() as any || 'ISO';
     const gameId = crypto.randomUUID();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    // Owner-scoped opaque path: {user_id}/{game_id}/{safeName}
-    const storagePath = `${this.currentUser.id}/${gameId}/${safeName}`;
+    // Owner-scoped opaque folder path: {user_id}/{game_id}
+    const storagePath = `${this.currentUser.id}/${gameId}`;
+
+    const CHUNK_SIZE = 40 * 1024 * 1024; // 40 MiB per part (strictly < 50 MB Free Plan limit)
+    const isChunked = file.size > 45 * 1024 * 1024;
+    const totalParts = isChunked ? Math.ceil(file.size / CHUNK_SIZE) : 1;
 
     // 1. Create DB metadata record in 'uploading' state
     const record = await this.createGameRecord({
@@ -205,32 +209,52 @@ export class SupabaseService {
       storage_path: storagePath,
       format: ext,
       size_bytes: file.size,
+      checksum: isChunked ? `chunked:${CHUNK_SIZE}:${totalParts}` : undefined,
       status: 'uploading',
     });
 
     try {
-      onProgress?.(5, 0, file.size);
+      if (isChunked) {
+        // Upload file in 40 MiB parts to bypass Supabase Free Plan 50 MB limit
+        for (let i = 0; i < totalParts; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min((i + 1) * CHUNK_SIZE, file.size);
+          const partBlob = file.slice(start, end);
+          const partPath = `${storagePath}/part_${String(i).padStart(4, '0')}.bin`;
 
-      // 2. Direct upload to private 'user-games' bucket
-      // Note: for large files, supabase-js handles binary streaming directly
-      const { error: uploadError } = await this.client.storage
-        .from('user-games')
-        .upload(storagePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-        });
+          const { error: partErr } = await this.client.storage
+            .from('user-games')
+            .upload(partPath, partBlob, {
+              cacheControl: '3600',
+              upsert: true,
+            });
 
-      if (uploadError) throw uploadError;
+          if (partErr) throw partErr;
 
-      onProgress?.(100, file.size, file.size);
+          const pct = Math.round(((i + 1) / totalParts) * 100);
+          onProgress?.(pct, end, file.size, i + 1, totalParts);
+        }
+      } else {
+        // Single file upload for files < 45 MB
+        const singlePath = `${storagePath}/${safeName}`;
+        onProgress?.(10, 0, file.size, 1, 1);
+        const { error: uploadError } = await this.client.storage
+          .from('user-games')
+          .upload(singlePath, file, {
+            cacheControl: '3600',
+            upsert: true,
+          });
 
-      // 3. Mark record as 'ready'
+        if (uploadError) throw uploadError;
+        onProgress?.(100, file.size, file.size, 1, 1);
+      }
+
+      // Mark record as 'ready'
       await this.updateGameStatus(record.id, 'ready');
       record.status = 'ready';
       return record;
 
     } catch (err) {
-      // Mark as failed in DB
       await this.updateGameStatus(record.id, 'failed');
       throw err;
     }
@@ -239,9 +263,12 @@ export class SupabaseService {
   public async getSignedStreamUrl(storagePath: string, expiresInSeconds = 3600): Promise<string> {
     if (!this.client) throw new Error('Supabase client not initialized.');
 
+    // If storagePath is a directory or single file
+    const target = storagePath.includes('.') ? storagePath : `${storagePath}/part_0000.bin`;
+
     const { data, error } = await this.client.storage
       .from('user-games')
-      .createSignedUrl(storagePath, expiresInSeconds);
+      .createSignedUrl(target, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
       throw error || new Error('Failed to create signed URL for streaming.');
@@ -250,12 +277,36 @@ export class SupabaseService {
     return data.signedUrl;
   }
 
-  public async deleteGame(gameId: string, storagePath: string): Promise<void> {
+  public async getSignedStreamUrlForPart(storagePath: string, partIndex: number, expiresInSeconds = 3600): Promise<string> {
+    if (!this.client) throw new Error('Supabase client not initialized.');
+
+    const partPath = `${storagePath}/part_${String(partIndex).padStart(4, '0')}.bin`;
+    const { data, error } = await this.client.storage
+      .from('user-games')
+      .createSignedUrl(partPath, expiresInSeconds);
+
+    if (error || !data?.signedUrl) {
+      throw error || new Error(`Failed to create signed URL for part ${partIndex}`);
+    }
+
+    return data.signedUrl;
+  }
+
+  public async deleteGame(gameId: string, storagePath: string, checksum?: string): Promise<void> {
     if (!this.client) return;
 
-    // 1. Delete storage object
+    // 1. Delete storage object(s)
     try {
-      await this.client.storage.from('user-games').remove([storagePath]);
+      if (checksum?.startsWith('chunked:')) {
+        const partsCount = parseInt(checksum.split(':')[2], 10) || 50;
+        const pathsToDelete = [];
+        for (let i = 0; i < partsCount; i++) {
+          pathsToDelete.push(`${storagePath}/part_${String(i).padStart(4, '0')}.bin`);
+        }
+        await this.client.storage.from('user-games').remove(pathsToDelete);
+      } else {
+        await this.client.storage.from('user-games').remove([storagePath]);
+      }
     } catch (e) {
       console.warn('[SupabaseService] Error removing storage object:', e);
     }
