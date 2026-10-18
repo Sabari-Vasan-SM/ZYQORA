@@ -363,17 +363,15 @@ export class RemoteGameFile {
           throw new Error(`HTTP Range Request failed with status ${resp.status} ${resp.statusText}`);
         }
 
+        let totalLength = this.totalSize || this.options.totalFileSize || 0;
         const contentRange = resp.headers.get('Content-Range');
-        if (!contentRange) {
-          throw new Error('Missing Content-Range header in HTTP 206 response');
+        if (contentRange) {
+          const match = contentRange.match(/bytes\s+(\d+)-(\d+)\/(\d+|\*)/i);
+          if (match && match[3] !== '*') {
+            totalLength = parseInt(match[3], 10);
+          }
         }
 
-        const match = contentRange.match(/bytes\s+(\d+)-(\d+)\/(\d+|\*)/i);
-        if (!match) {
-          throw new Error(`Malformed Content-Range: ${contentRange}`);
-        }
-
-        const totalLength = match[3] !== '*' ? parseInt(match[3], 10) : 0;
         const arrayBuf = await resp.arrayBuffer();
         const chunkData = new Uint8Array(arrayBuf);
 
