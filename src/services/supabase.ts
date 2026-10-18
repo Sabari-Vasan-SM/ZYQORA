@@ -142,26 +142,43 @@ export class SupabaseService {
 
   // --- Database Metadata CRUD ---
 
-  public async listUserGames(): Promise<GameMetadata[]> {
-    if (!this.client || !this.currentUser) return [];
+  private getGuestId(): string {
+    let guestId = localStorage.getItem('zyqora_guest_device_id');
+    if (!guestId) {
+      guestId = crypto.randomUUID();
+      localStorage.setItem('zyqora_guest_device_id', guestId);
+    }
+    return guestId;
+  }
 
-    const { data, error } = await this.client
+  public async listUserGames(): Promise<GameMetadata[]> {
+    if (!this.client) return [];
+
+    let query = this.client
       .from('games')
       .select('*')
       .order('created_at', { ascending: false });
 
+    if (this.currentUser) {
+      query = query.eq('user_id', this.currentUser.id);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []) as GameMetadata[];
   }
 
   public async createGameRecord(game: Omit<GameMetadata, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Promise<GameMetadata> {
-    if (!this.client || !this.currentUser) throw new Error('Must be signed in to add games.');
+    if (!this.client) throw new Error('Supabase client not initialized.');
 
-    const payload = {
+    const payload: any = {
       ...game,
-      user_id: this.currentUser.id,
       status: game.status || 'uploading',
     };
+
+    if (this.currentUser) {
+      payload.user_id = this.currentUser.id;
+    }
 
     const { data, error } = await this.client
       .from('games')
@@ -191,13 +208,14 @@ export class SupabaseService {
     onProgress?: (percent: number, loaded: number, total: number, currentPart?: number, totalParts?: number) => void,
     abortSignal?: AbortSignal
   ): Promise<GameMetadata> {
-    if (!this.client || !this.currentUser) throw new Error('Must be signed in to upload games.');
+    if (!this.client) throw new Error('Supabase client not initialized.');
 
     const ext = file.name.split('.').pop()?.toUpperCase() as any || 'ISO';
     const gameId = crypto.randomUUID();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    // Owner-scoped opaque folder path: {user_id}/{game_id}
-    const storagePath = `${this.currentUser.id}/${gameId}`;
+    // Owner or guest folder path
+    const ownerId = this.currentUser ? this.currentUser.id : `guest_${this.getGuestId()}`;
+    const storagePath = `${ownerId}/${gameId}`;
 
     const CHUNK_SIZE = 40 * 1024 * 1024; // 40 MiB per part (strictly < 50 MB Free Plan limit)
     const isChunked = file.size > 45 * 1024 * 1024;
@@ -276,6 +294,8 @@ export class SupabaseService {
       .createSignedUrl(target, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
+      const { data: pubData } = this.client.storage.from('user-games').getPublicUrl(target);
+      if (pubData?.publicUrl) return pubData.publicUrl;
       throw error || new Error('Failed to create signed URL for streaming.');
     }
 
@@ -291,6 +311,8 @@ export class SupabaseService {
       .createSignedUrl(partPath, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
+      const { data: pubData } = this.client.storage.from('user-games').getPublicUrl(partPath);
+      if (pubData?.publicUrl) return pubData.publicUrl;
       throw error || new Error(`Failed to create signed URL for part ${partIndex}`);
     }
 

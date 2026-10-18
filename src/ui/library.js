@@ -257,86 +257,10 @@ export class GameLibrary {
       return;
     }
 
-    // Check user session
+    // User session check: supports both authenticated accounts and guest upload
     let currentUser = supabase.getUser();
-    if (!currentUser) {
-      // Try anonymous sign-in first
-      try {
-        if (stateText) stateText.textContent = 'Connecting guest session...';
-        currentUser = await supabase.signInAnonymously();
-      } catch (_) {
-        // Anonymous auth disabled in Supabase dashboard; request inline credentials
-      }
-    }
 
-    // If still not signed in, show inline auth form inside upload modal
-    if (!currentUser) {
-      if (titleEl) titleEl.textContent = 'Supabase Sign-In Required';
-      if (authBox) authBox.style.display = 'block';
-      if (progressSection) progressSection.style.display = 'none';
-
-      currentUser = await new Promise((resolve) => {
-        const btnSignIn = document.getElementById('btn-modal-auth-signin');
-        const btnSignUp = document.getElementById('btn-modal-auth-signup');
-        const emailInput = document.getElementById('modal-auth-email');
-        const passInput = document.getElementById('modal-auth-pass');
-
-        const cleanup = () => {
-          btnSignIn?.removeEventListener('click', doSignIn);
-          btnSignUp?.removeEventListener('click', doSignUp);
-        };
-
-        const doSignIn = async () => {
-          const email = emailInput?.value.trim();
-          const pass = passInput?.value.trim();
-          if (!email || !pass) {
-            this.showToast('Please enter email and password', 'warn');
-            return;
-          }
-          try {
-            btnSignIn.textContent = 'Signing in...';
-            const u = await supabase.signInWithPassword(email, pass);
-            this.showToast('Signed in to Supabase!', 'success');
-            cleanup();
-            resolve(u);
-          } catch (e) {
-            this.showToast(`Sign in error: ${e.message}`, 'error');
-          } finally {
-            btnSignIn.textContent = 'Sign In & Upload';
-          }
-        };
-
-        const doSignUp = async () => {
-          const email = emailInput?.value.trim();
-          const pass = passInput?.value.trim();
-          if (!email || !pass) {
-            this.showToast('Please enter email and password', 'warn');
-            return;
-          }
-          try {
-            btnSignUp.textContent = 'Signing up...';
-            const u = await supabase.signUp(email, pass);
-            this.showToast('Account created! Sign in to proceed.', 'info');
-            cleanup();
-            resolve(u);
-          } catch (e) {
-            this.showToast(`Sign up error: ${e.message}`, 'error');
-          } finally {
-            btnSignUp.textContent = 'Sign Up';
-          }
-        };
-
-        btnSignIn?.addEventListener('click', doSignIn);
-        btnSignUp?.addEventListener('click', doSignUp);
-      });
-
-      if (!currentUser || isCancelled) {
-        if (uploadModal) uploadModal.classList.remove('open');
-        return;
-      }
-    }
-
-    // Now authenticated: show progress section and start upload!
+    // Show progress section and start upload directly
     if (authBox) authBox.style.display = 'none';
     if (progressSection) progressSection.style.display = 'block';
     if (titleEl) titleEl.textContent = 'Uploading Game to Supabase';
@@ -381,11 +305,17 @@ export class GameLibrary {
     } catch (err) {
       if (err.name === 'AbortError' || err.message?.includes('aborted')) {
         this.showToast('Upload cancelled', 'warn');
+        if (uploadModal) uploadModal.classList.remove('open');
       } else {
         console.error('[GameLibrary] Cloud upload error:', err);
-        this.showToast(`Upload failed: ${err.message}`, 'error');
+        const errMsg = err.message || 'Unknown error';
+        this.showToast(`Upload failed: ${errMsg}`, 'error');
+        if (titleEl) titleEl.textContent = 'Supabase Setup Required';
+        if (stateText) {
+          stateText.innerHTML = `⚠️ <span style="color: #f87171;">Storage: ${errMsg}</span><br><span style="color: #94a3b8; font-size: 11px;">Please run the 1-click SQL setup script in your Supabase SQL Editor.</span>`;
+        }
+        if (authBox) authBox.style.display = 'block';
       }
-      if (uploadModal) uploadModal.classList.remove('open');
     } finally {
       this.currentUploadAbort = null;
       if (progressBar) progressBar.style.width = '0%';
