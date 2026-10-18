@@ -177,6 +177,7 @@ export class TouchControls {
       this.analogActive = true;
       this.analogTouchId = touch.identifier ?? 'pointer';
       const rect = base.getBoundingClientRect();
+      this.analogRadius = Math.max(20, (rect.width / 2) - 8);
       this.analogCenter = {
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,

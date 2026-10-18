@@ -147,7 +147,7 @@ export class PerformanceHUD {
       else ctx.lineTo(x, y);
     });
 
-    ctx.strokeStyle = this.fps >= 55 ? '#00d4aa' : this.fps >= 30 ? '#ffaa00' : '#ff2a6d';
+    ctx.strokeStyle = this.fps >= 55 ? '#ffffff' : this.fps >= 30 ? '#aaaaaa' : '#666666';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }

@@ -4,6 +4,7 @@ import { TouchControls } from './ui/touch-controls.js';
 import { GameLibrary } from './ui/library.js';
 import { EmulatorManager } from './core/emulator-manager.js';
 import { SupabaseService } from './services/supabase.ts';
+import { GamingLoader } from './ui/gaming-loader.js';
 
 // Toast Notification helper
 function showToast(message, type = 'info') {
@@ -44,6 +45,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Performance HUD
   const hud = new PerformanceHUD('performance-hud', 'frame-time-canvas');
 
+  // Gaming Theme Boot Loader
+  const gamingLoader = new GamingLoader('gaming-loader');
+
   // Emulator Manager
   const emulator = new EmulatorManager(canvas, {
     onStatusChange: (state, text) => {
@@ -55,6 +59,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     onToast: (msg, type) => showToast(msg, type),
     onResolutionChange: (mult) => hud.setResolution(mult),
     onStreamingMetrics: (metrics, totalBytes) => hud.updateStreamingMetrics(metrics, totalBytes),
+    onGamingLoaderStart: (name) => gamingLoader.show(name),
+    onGamingLoaderProgress: (step, sub, pct, bytes) => gamingLoader.setStep(step, sub, pct, bytes),
+    onGamingLoaderFinish: () => gamingLoader.finish(),
   });
 
   // Gamepad Manager
@@ -88,8 +95,75 @@ window.addEventListener('DOMContentLoaded', async () => {
     (msg, type) => showToast(msg, type)
   );
 
+  // Screen Mode Manager
+  const SCREEN_MODES = ['fit', 'fill', 'stretch'];
+  let currentScreenModeIndex = 0;
+
+  const savedScreenMode = localStorage.getItem('zyqora_screen_mode') || 'fit';
+  currentScreenModeIndex = Math.max(0, SCREEN_MODES.indexOf(savedScreenMode));
+
+  function applyScreenMode(mode, notify = true) {
+    if (!pspFrame) return;
+    pspFrame.classList.remove('screen-fit', 'screen-fill', 'screen-stretch');
+    pspFrame.classList.add(`screen-${mode}`);
+    localStorage.setItem('zyqora_screen_mode', mode);
+
+    const labels = {
+      fit: 'Fit (16:9 Aspect)',
+      fill: 'Fill (Cover)',
+      stretch: 'Stretch (Full View)',
+    };
+
+    const modeLabel = labels[mode] || mode;
+    const btnScreen = document.getElementById('btn-screen-size');
+    const btnDockScreen = document.getElementById('btn-dock-screen');
+    const btnMobileScreen = document.getElementById('btn-mobile-screen');
+
+    [btnScreen, btnDockScreen, btnMobileScreen].forEach((b) => {
+      if (b) b.title = `Screen Mode: ${modeLabel}`;
+    });
+
+    if (notify) {
+      showToast(`Screen Mode: ${modeLabel}`, 'info');
+    }
+  }
+
+  function cycleScreenMode() {
+    currentScreenModeIndex = (currentScreenModeIndex + 1) % SCREEN_MODES.length;
+    applyScreenMode(SCREEN_MODES[currentScreenModeIndex], true);
+  }
+
+  // Initial Screen Mode
+  applyScreenMode(SCREEN_MODES[currentScreenModeIndex], false);
+
+  // Stats Overlay Manager
+  const savedStatsVisible = localStorage.getItem('zyqora_stats_visible');
+  if (savedStatsVisible !== null) {
+    hud.toggle(savedStatsVisible === '1');
+  }
+
+  function toggleStats() {
+    hud.toggle();
+    const isVis = hud.isVisible;
+    localStorage.setItem('zyqora_stats_visible', isVis ? '1' : '0');
+
+    const btnToggleStats = document.getElementById('btn-toggle-stats');
+    const btnDockStats = document.getElementById('btn-dock-stats');
+    const btnHudToggle = document.getElementById('btn-hud-toggle');
+    const btnMobileStats = document.getElementById('btn-mobile-stats');
+
+    [btnToggleStats, btnDockStats, btnHudToggle, btnMobileStats].forEach((btn) => {
+      if (btn) {
+        if (isVis) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
+
+    showToast(isVis ? 'Performance Stats: Visible' : 'Performance Stats: Hidden', 'info');
+  }
+
   // Setup UI Interactions
-  setupHeaderControls(emulator, library, touch, hud);
+  setupHeaderControls(emulator, library, touch, hud, cycleScreenMode, toggleStats);
   setupWelcomeOverlay(emulator, library);
   setupModals(emulator);
   setupDropzone(library);
@@ -115,7 +189,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }, 300);
 });
 
-function setupHeaderControls(emulator, library, touch, hud) {
+function setupHeaderControls(emulator, library, touch, hud, cycleScreenMode, toggleStats) {
   // Library Button
   const btnLibrary = document.getElementById('btn-open-library');
   const libraryModal = document.getElementById('library-modal');
@@ -150,17 +224,24 @@ function setupHeaderControls(emulator, library, touch, hud) {
     showToast(touch.isVisible ? 'Touch Controls Enabled' : 'Touch Controls Hidden', 'info');
   });
 
-  // Toggle HUD
-  document.getElementById('btn-hud-toggle')?.addEventListener('click', () => {
-    hud.toggle();
-    showToast(hud.isVisible ? 'Performance HUD Shown' : 'Performance HUD Hidden', 'info');
-  });
+  // Screen Size Cycling (Desktop & Mobile)
+  document.getElementById('btn-screen-size')?.addEventListener('click', cycleScreenMode);
+  document.getElementById('btn-dock-screen')?.addEventListener('click', cycleScreenMode);
+  document.getElementById('btn-mobile-screen')?.addEventListener('click', cycleScreenMode);
+
+  // Performance Stats Toggling (Desktop & Mobile)
+  document.getElementById('btn-toggle-stats')?.addEventListener('click', toggleStats);
+  document.getElementById('btn-dock-stats')?.addEventListener('click', toggleStats);
+  document.getElementById('btn-hud-toggle')?.addEventListener('click', toggleStats);
+  document.getElementById('btn-mobile-stats')?.addEventListener('click', toggleStats);
 
   // Pause
   document.getElementById('btn-dock-pause')?.addEventListener('click', () => emulator.togglePause());
+  document.getElementById('btn-mobile-pause')?.addEventListener('click', () => emulator.togglePause());
 
   // Fast Forward
   document.getElementById('btn-dock-fastforward')?.addEventListener('click', () => emulator.fastForward());
+  document.getElementById('btn-mobile-fastforward')?.addEventListener('click', () => emulator.fastForward());
 }
 
 function setupWelcomeOverlay(emulator, library) {

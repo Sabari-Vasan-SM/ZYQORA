@@ -79,6 +79,9 @@ export class EmulatorManager {
     this.onToast = options.onToast || (() => {});
     this.onResolutionChange = options.onResolutionChange || (() => {});
     this.onStreamingMetrics = options.onStreamingMetrics || (() => {});
+    this.onGamingLoaderStart = options.onGamingLoaderStart || (() => {});
+    this.onGamingLoaderProgress = options.onGamingLoaderProgress || (() => {});
+    this.onGamingLoaderFinish = options.onGamingLoaderFinish || (() => {});
 
     this.isLoaded = false;
     this.isRunning = false;
@@ -126,6 +129,7 @@ export class EmulatorManager {
    */
   async launchGame(gameData) {
     this.unlockAudio();
+    this.onGamingLoaderStart(gameData.name);
     this.onStatusChange('loading', `Preparing ${gameData.name}...`);
     this.onToast(`Loading ${gameData.name}...`, 'info');
 
@@ -143,6 +147,7 @@ export class EmulatorManager {
       let streamAdapter = null;
 
       if (gameData.isCloudStream && gameData.streamUrl) {
+        this.onGamingLoaderProgress('CONNECTING TO SUPABASE', 'Negotiating HTTP byte ranges with cloud storage...', 15);
         this.onStatusChange('loading', `Connecting to cloud stream for ${gameData.name}...`);
         this.remoteGameFile = new RemoteGameFile(gameData.streamUrl, {
           gameVersionId: gameData.id,
@@ -158,17 +163,25 @@ export class EmulatorManager {
 
         streamAdapter = new StreamVirtualFileAdapter(this.remoteGameFile);
         this.streamAdapter = streamAdapter;
-        const bootInfo = await streamAdapter.prepareBootSectors((msg) => this.onStatusChange('loading', msg));
+        const bootInfo = await streamAdapter.prepareBootSectors((msg, step, pct, bytesStr) => {
+          this.onStatusChange('loading', msg);
+          if (step) {
+            this.onGamingLoaderProgress(step, msg, pct, bytesStr);
+          }
+        });
         filename = gameData.fileName || 'cloud_stream.iso';
         this.onToast(`Stream ready: Cached ${(bootInfo.bootTransferredBytes / (1024 * 1024)).toFixed(1)} MB of ${(bootInfo.totalSize / (1024 * 1024)).toFixed(0)} MB`, 'info');
 
       } else if (gameData.file) {
+        this.onGamingLoaderProgress('DOWNLOADING PACKETS', 'Reading local file buffer...', 40);
         buffer = await gameData.file.arrayBuffer();
         filename = gameData.file.name || 'game.iso';
       } else if (gameData.blob) {
+        this.onGamingLoaderProgress('DOWNLOADING PACKETS', 'Extracting game memory blob...', 40);
         buffer = await gameData.blob.arrayBuffer();
         filename = gameData.fileName || 'game.iso';
       } else if (gameData.url) {
+        this.onGamingLoaderProgress('DOWNLOADING PACKETS', 'Fetching game data...', 40);
         const resp = await fetch(gameData.url);
         if (!resp.ok) throw new Error(`Failed to download ${gameData.url}`);
         buffer = await resp.arrayBuffer();
@@ -176,6 +189,7 @@ export class EmulatorManager {
       }
 
       this.activeGameName = gameData.name;
+      this.onGamingLoaderProgress('STARTING PSP ENGINE', 'Initializing virtual GE hardware & audio synths...', 96);
       await this.bootModule(buffer, filename, streamAdapter);
 
       // Free buffer from JS memory immediately
@@ -183,6 +197,7 @@ export class EmulatorManager {
 
       this.isRunning = true;
       this.onStatusChange('active', gameData.name);
+      this.onGamingLoaderFinish();
       this.onToast(`${gameData.name} running! Tap ✕ or press Enter to advance`, 'success');
 
       // Focus canvas for immediate input capture
@@ -190,6 +205,8 @@ export class EmulatorManager {
     } catch (err) {
       console.error('[ZYQORA] Launch error:', err);
       this.onStatusChange('error', err.message);
+      this.onGamingLoaderProgress('BOOT ERROR', err.message, 100);
+      setTimeout(() => this.onGamingLoaderFinish(), 2000);
       this.onToast(`Failed to boot game: ${err.message}`, 'error');
     }
   }

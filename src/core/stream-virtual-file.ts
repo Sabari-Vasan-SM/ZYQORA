@@ -30,8 +30,8 @@ export class StreamVirtualFileAdapter {
   /**
    * Prime the boot sectors (< 5% of file) and prepare Emscripten FS mount
    */
-  async prepareBootSectors(onProgress?: (msg: string) => void): Promise<MountStreamResult> {
-    onProgress?.('Connecting to cloud storage and reading ISO header...');
+  async prepareBootSectors(onProgress?: (msg: string, step?: string, pct?: number, bytesStr?: string) => void): Promise<MountStreamResult> {
+    onProgress?.('Connecting to Supabase Storage and checking range support...', 'CONNECTING TO SUPABASE', 15);
     this.totalSize = await this.remoteFile.open();
 
     let bootBytesTransferred = 0;
@@ -39,29 +39,43 @@ export class StreamVirtualFileAdapter {
     let gameId = 'PSP_GAME';
 
     try {
+      onProgress?.('Downloading initial ISO sectors and primary volume descriptors...', 'DOWNLOADING PACKETS', 30);
       const parser = new ISOParser(this.remoteFile);
       const metadata = await parser.parseBootMetadata();
       title = metadata.title;
       gameId = metadata.gameId;
 
-      onProgress?.(`Found ${title} (${gameId}). Pre-streaming boot binary...`);
+      onProgress?.(`Parsed ISO descriptors for ${title} (${gameId}). Pre-streaming boot binary...`, 'PARSING ISO DESCRIPTORS', 50);
 
       // Pre-fetch all sectors required for boot
+      let rangeIdx = 0;
       for (const range of metadata.bootByteRanges) {
+        rangeIdx++;
         const len = range.end - range.start + 1;
         const bytes = await this.remoteFile.read(range.start, len);
         bootBytesTransferred += bytes.length;
         this.cacheSlice(range.start, bytes);
+
+        const currentPct = Math.min(85, 50 + Math.round((rangeIdx / metadata.bootByteRanges.length) * 35));
+        const bytesLoadedMB = (bootBytesTransferred / (1024 * 1024)).toFixed(1);
+        const totalMB = (this.totalSize / (1024 * 1024)).toFixed(0);
+        onProgress?.(
+          `Downloading game boot packets (${bytesLoadedMB} MB / ${totalMB} MB)...`,
+          'DOWNLOADING PACKETS',
+          currentPct,
+          `${bytesLoadedMB} MB / ${totalMB} MB SYNCED`
+        );
       }
     } catch (e: any) {
       console.warn('[StreamVirtualFile] Non-ISO or Homebrew PBP detected, prefetching first 2 MiB:', e);
       // Fallback for PBP / PRX homebrew files: prefetch first 2 MiB
+      onProgress?.('Downloading game packets for homebrew...', 'DOWNLOADING PACKETS', 40);
       const initialBytes = await this.remoteFile.read(0, Math.min(2 * 1024 * 1024, this.totalSize));
       bootBytesTransferred += initialBytes.length;
       this.cacheSlice(0, initialBytes);
     }
 
-    onProgress?.(`Ready to launch! Boot data cached (${(bootBytesTransferred / (1024 * 1024)).toFixed(2)} MB of ${(this.totalSize / (1024 * 1024)).toFixed(1)} MB)`);
+    onProgress?.('Compiling PSP Allegrex MIPS code and PRX modules...', 'COMPILING SHADERS & PRX', 92);
 
     return {
       virtualPath: '/games/cloud_stream.iso',
